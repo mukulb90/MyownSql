@@ -1,1 +1,16 @@
 cs222Project/Debug
+*.o
+*.a
+cs222Project/src/rbf/rbftest1
+cs222Project/src/rbf/rbftest10
+cs222Project/src/rbf/rbftest11
+cs222Project/src/rbf/rbftest12
+cs222Project/src/rbf/rbftest2
+cs222Project/src/rbf/rbftest3
+cs222Project/src/rbf/rbftest4
+cs222Project/src/rbf/rbftest5
+cs222Project/src/rbf/rbftest6
+cs222Project/src/rbf/rbftest7
+cs222Project/src/rbf/rbftest8
+cs222Project/src/rbf/rbftest8b
+cs222Project/src/rbf/rbftest9
