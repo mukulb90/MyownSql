@@ -33,6 +33,10 @@ private:
 
 class FileHandle
 {
+
+private:
+    string fileName;
+
 public:
     // variables to keep the counter for each operation
     unsigned readPageCounter;
@@ -42,6 +46,8 @@ public:
     FileHandle();                                                         // Default constructor
     ~FileHandle();                                                        // Destructor
 
+    RC openFile(const string &fileName);
+    RC closeFile(const string &fileName);
     RC readPage(PageNum pageNum, void *data);                             // Get a specific page
     RC writePage(PageNum pageNum, const void *data);                      // Write a specific page
     RC appendPage(const void *data);                                      // Append a specific page
