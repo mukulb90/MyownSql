@@ -1,8 +1,13 @@
 #include "pfm.h"
 #include "page.h"
+#include <string.h>
 
-Page::Page(int pageId) {
-	this->pageId = pageId;
+Page::Page() {
+	this->data = (void *)malloc(PAGE_SIZE);
+}
+
+Page::Page(void * data) {
+	this->data = data;
 }
 
 int Page::getBytes() {
@@ -10,9 +15,14 @@ int Page::getBytes() {
 }
 
 int Page::mapFromObject(void* data) {
-	return -1;
+	memcpy(data, this->data, PAGE_SIZE);
+	return 0;
 }
 
 int Page::mapToObject(void* data) {
-	return -1;
+	memcpy(this->data, data, PAGE_SIZE);
+	return 0;
+}
+
+Page::~Page() {
 }

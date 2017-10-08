@@ -5,8 +5,10 @@
 
 class Page: public Serializable {
 public:
-	int pageId;
-	Page(int pageId);
+	void * data;
+	Page();
+	Page(void * data);
+	~Page();
 
 	int getBytes();
 	int mapFromObject(void* data);

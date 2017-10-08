@@ -25,7 +25,7 @@ PagedFileManager::PagedFileManager() {
 }
 
 PagedFileManager::~PagedFileManager() {
-	free(_pf_manager);
+//	free(_pf_manager);
 }
 
 RC PagedFileManager::createFile(const string &fileName) {
@@ -83,27 +83,52 @@ FileHandle::~FileHandle() {
 }
 
 RC FileHandle::readPage(PageNum pageNum, void *data) {
-	return -1;
+	if(pageNum >= this->file->numberOfPages) {
+		return -1;
+	}
+	int pageId = this->file->pages.at(pageNum);
+		Page * page = new Page();
+		string pathName = this->file->getPagePathFromPageId(pageId);
+		page->deserialize(pathName);
+		memcpy(data, page->data, PAGE_SIZE);
+		data = page->data;
+
+
+		this->readPageCounter++;
+		string path = FILE_HANDLE_SERIALIZATION_LOCATION;
+		this->serialize(path);
+		return 0;
 }
 
 RC FileHandle::writePage(PageNum pageNum, const void *data) {
-	return -1;
+// 	Create a new Page
+	if(pageNum >= this->file->numberOfPages) {
+		return -1;
+	}
+	int pageId = this->file->pages.at(pageNum);
+	Page * page = new Page((void *)data);
+	string pathName = this->file->getPagePathFromPageId(pageId);
+	page->serialize(pathName);
+
+//	Increment
+	this->writePageCounter++;
+	string path = FILE_HANDLE_SERIALIZATION_LOCATION;
+	this->serialize(path);
+	return 0;
 }
 
 
 RC FileHandle::appendPage(const void *data) {
 // 	Create a new Page
 	int pageId = this->file->getNextPageId();
-	Page * page = new Page(pageId);
-	string pageName = to_string(pageId);
-	//	#TODO Add the data to the page;
-
-	page->serialize(pageName);
+	Page * page = new Page((void *)data);
+	string pathName = this->file->getPagePathFromPageId(pageId);
+	page->serialize(pathName);
 
 //	Add it to the catalog and increment number of pages
 	this->file->numberOfPages++;
-
-//	#TODO add new page Id to catalog
+//	add new page Id to catalog
+	this->file->pages.push_back(pageId);
 	this->file->serialize(this->file->name);
 
 //	Increment

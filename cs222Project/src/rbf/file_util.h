@@ -11,4 +11,6 @@ bool fileExists(string fileName);
 
 unsigned long fsize(char * fileName);
 
+string getParentPath(string &fileName);
+
 #endif

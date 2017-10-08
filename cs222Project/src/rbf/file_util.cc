@@ -17,3 +17,10 @@ unsigned long fsize(char * fileName) {
 	fclose(f);
 	return len;
 }
+
+string getParentPath(string &fileName) {
+	size_t found;
+	found=fileName.find_last_of("/\\");
+	return fileName.substr(0,found);
+}
+

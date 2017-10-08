@@ -1,29 +1,20 @@
 #include <cassert>
 #include <stdio.h>
-#include "pfm.h"
+#include "pf.h"
 
 int main(int argc, char **argv) {
-//	FileHandle handle;
-//	string path = FILE_HANDLE_SERIALIZATION_LOCATION;
-//	FILE * file = fopen(path.c_str(), "wb");
-//	assert(handle.readPageCounter == 0);
-//	assert(handle.writePageCounter== 0 );
-//	assert(handle.appendPageCounter == 0);
-//
-//	handle.readPageCounter += 1;
-//	handle.writePageCounter += 2;
-//	handle.appendPageCounter += 3;
-//
-//	handle.serialize(file);
-//	fclose(file);
-//
-//	file = fopen(path.c_str(), "rb");
-//	FileHandle handle2;
-//	handle2.deserialize(file);
-//	assert(handle.readPageCounter == 1);
-//	assert(handle.writePageCounter== 2 );
-//	assert(handle.appendPageCounter == 3);
-//	fclose(file);
+
+	PagedFile * file = new PagedFile("test_pf_serialization");
+	file->pages.push_back(++file->numberOfPages);
+	cout << file->pages.at(0) << endl;
+	file->serialize(file->name);
+
+	PagedFile * file2 = new PagedFile("test_pf_serialization");
+	file2->deserialize(file2->name);
+
+	assert(file2->name == file->name);
+	assert(file2->numberOfPages == file->numberOfPages);
+	assert(file2->pages[0] == file->pages[0]);
 	cout << "All Test Cases Passed";
 	return 0;
 

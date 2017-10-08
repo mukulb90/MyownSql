@@ -5,17 +5,16 @@
 #include <sstream>
 #include <iostream>
 #include "abstract_serializable.h"
+#include <vector>
 
 using namespace std;
 
 class PagedFile: public Serializable {
 
-private:
-	int* pages;
-
 public:
 	int numberOfPages;
 	string name;
+	vector<int> pages;
 
 	PagedFile(string fileName);
 	PagedFile(string fileName, int numberOfPages);
@@ -27,6 +26,7 @@ public:
 	int mapToObject(void* data);
 	int getPointerToPageByIndex(int num);
 	int getNextPageId();
+	string getPagePathFromPageId(int pageId);
 };
 
 #endif
