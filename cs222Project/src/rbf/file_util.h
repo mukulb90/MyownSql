@@ -1,19 +1,14 @@
-#include <sys/stat.h>
+#ifndef _file_util_h_
+#define _file_util_h_
+
 #include <cstdio>
 #include <iostream>
 #include <string>
 
-bool fileExists(std::string fileName) {
-	struct stat stFileInfo;
+using namespace std;
 
-	if (stat(fileName.c_str(), &stFileInfo) == 0)
-		return true;
-	else
-		return false;
-}
+bool fileExists(string fileName);
 
-unsigned long fsize(FILE* f) {
-	fseek(f, 0, SEEK_END);
-	unsigned long len = (unsigned long) ftell(f);
-	return len;
-}
+unsigned long fsize(char * fileName);
+
+#endif

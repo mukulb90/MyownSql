@@ -1,17 +1,24 @@
 include ../makefile.inc
 
-all: librbf.a rbftest1 rbftest2 rbftest3 rbftest4 rbftest5 rbftest6 rbftest7 rbftest8 rbftest8b rbftest9 rbftest10 rbftest11 rbftest12 rbtest13
+all: librbf.a rbftest1 rbftest2 rbftest3 rbftest4 rbftest5 rbftest6 rbftest7 rbftest8 rbftest8b rbftest9 rbftest10 rbftest11 rbftest12 rbtest13 file_handle_test
 
 # c file dependencies
+abstract_serializable.o: abstract_serializable.h
+file_util.o : file_util.h
 pfm.o: pfm.h
 rbfm.o: rbfm.h
 pf.o: pf.h
+page.o : page.h
 
 # lib file dependencies
+librbf.a: librbf.a(pfm.o)
+librbf.a: librbf.a(file_util.o)
+librbf.a: librbf.a(abstract_serializable.o)
 librbf.a: librbf.a(pf.o)
-librbf.a: librbf.a(pfm.o)  # and possibly other .o files
 librbf.a: librbf.a(rbfm.o)
+librbf.a: librbf.a(page.o)
 
+# and possibly other .o files
 rbftest1.o: pfm.h rbfm.h
 rbftest2.o: pfm.h rbfm.h
 rbftest3.o: pfm.h rbfm.h
@@ -26,6 +33,7 @@ rbftest10.o: pfm.h rbfm.h
 rbftest11.o: pfm.h rbfm.h
 rbftest12.o: pfm.h rbfm.h
 rbtest13.o: pf.h
+file_handle_test.o: pfm.h
 
 # binary dependencies
 rbftest1: rbftest1.o librbf.a $(CODEROOT)/rbf/librbf.a
@@ -42,6 +50,7 @@ rbftest10: rbftest10.o librbf.a $(CODEROOT)/rbf/librbf.a
 rbftest11: rbftest11.o librbf.a $(CODEROOT)/rbf/librbf.a
 rbftest12: rbftest12.o librbf.a $(CODEROOT)/rbf/librbf.a
 rbtest13: rbtest13.o librbf.a $(CODEROOT)/rbf/librbf.a
+file_handle_test: file_handle_test.o librbf.a $(CODEROOT)/rbf/librbf.a
 
 # dependencies to compile used libraries
 .PHONY: $(CODEROOT)/rbf/librbf.a
@@ -50,4 +59,4 @@ $(CODEROOT)/rbf/librbf.a:
 
 .PHONY: clean
 clean:
-	-rm rbftest1 rbftest2 rbftest3 rbftest4 rbftest5 rbftest6 rbftest7 rbftest8 rbftest8b rbftest9 rbftest10 rbftest11 rbftest12 *.a *.o
+	-rm rbftest1 rbftest2 rbftest3 rbftest4 rbftest5 rbftest6 rbftest7 rbftest8 rbftest8b rbftest9 rbftest10 rbftest11 rbftest12 rbtest13 file_handle_test *.a *.o 
