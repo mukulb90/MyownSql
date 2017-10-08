@@ -80,5 +80,5 @@ int PagedFile::getNextPageId() {
 }
 
 string PagedFile::getPagePathFromPageId(int pageId) {
-	return this->name + "/" + to_string(pageId);
+	return this->name + "-" + to_string(pageId);
 }
