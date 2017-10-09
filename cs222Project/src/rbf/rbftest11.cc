@@ -3,10 +3,10 @@
 #include <string>
 #include <cassert>
 #include <sys/stat.h>
-#include <stdlib.h> 
+#include <stdlib.h>
 #include <string.h>
 #include <stdexcept>
-#include <stdio.h> 
+#include <stdio.h>
 
 #include "pfm.h"
 #include "rbfm.h"
@@ -61,7 +61,7 @@ int RBFTest_11(RecordBasedFileManager *rbfm) {
         memset(record, 0, 1000);
         int size = 0;
         prepareLargeRecord2(recordDescriptor.size(), nullsIndicator, i, record, &size);
-
+        cout << i << "->"<< size <<endl;
         rc = rbfm->insertRecord(fileHandle, recordDescriptor, record, rid);
         assert(rc == success && "Inserting a record should not fail.");
 
@@ -102,12 +102,12 @@ int RBFTest_11(RecordBasedFileManager *rbfm) {
 
 int main()
 {
-    // To test the functionality of the record-based file manager 
-    RecordBasedFileManager *rbfm = RecordBasedFileManager::instance(); 
-     
+    // To test the functionality of the record-based file manager
+    RecordBasedFileManager *rbfm = RecordBasedFileManager::instance();
+
     remove("test11");
     remove("test11rids");
-       
+
     RC rcmain = RBFTest_11(rbfm);
 
     return rcmain;

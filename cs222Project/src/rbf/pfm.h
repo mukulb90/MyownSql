@@ -36,14 +36,12 @@ private:
 
 class FileHandle : public Serializable{
 
-private:
-	PagedFile * file;
-
 public:
 	// variables to keep the counter for each operation
 	unsigned readPageCounter;
 	unsigned writePageCounter;
 	unsigned appendPageCounter;
+	PagedFile * file;
 	FILE * serializerHandle;
 	FILE * deserialerHandle;
 

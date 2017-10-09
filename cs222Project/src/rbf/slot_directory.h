@@ -9,8 +9,11 @@
 class SlotDirectory: public Serializable {
 
 public:
-	SlotDirectory();
-	vector<Slot*> slots;
+	Slot * slots;
+	int numberOfSlots;
+
+	SlotDirectory(int numOfSlots);
+
 	int getNumberOfSlots();
 	int getBytes();
 	int mapFromObject(void* data);
