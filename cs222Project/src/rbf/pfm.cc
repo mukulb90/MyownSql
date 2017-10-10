@@ -25,7 +25,7 @@ PagedFileManager::PagedFileManager() {
 }
 
 PagedFileManager::~PagedFileManager() {
-//	free(_pf_manager);
+	delete _pf_manager;
 }
 
 RC PagedFileManager::createFile(const string &fileName) {
@@ -35,12 +35,19 @@ RC PagedFileManager::createFile(const string &fileName) {
 	}
 	PagedFile* file = new PagedFile(fileName);
 	file->serialize(fileName);
+	delete file;
 	return 0;
 }
 
 RC PagedFileManager::destroyFile(const string &fileName) {
 	if (!fileExists(fileName)) {
 		return -1;
+	}
+	PagedFile file = PagedFile(fileName);
+	file.deserialize(fileName);
+	for(int i=0; i< file.pages.size(); i++) {
+		string pagePath = file.getPagePathFromPageId(file.pages[i]);
+		remove(pagePath.c_str());
 	}
 	return remove(fileName.c_str());
 }

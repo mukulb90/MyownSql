@@ -1,5 +1,6 @@
 #include "rbfm.h"
 #include "page.h"
+#include "math.h"
 
 RecordBasedFileManager* RecordBasedFileManager::_rbf_manager = 0;
 
@@ -17,6 +18,7 @@ RecordBasedFileManager::RecordBasedFileManager()
 
 RecordBasedFileManager::~RecordBasedFileManager()
 {
+	delete _rbf_manager;
 }
 
 RC RecordBasedFileManager::createFile(const string &fileName) {
@@ -44,22 +46,23 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 		return -1;
 	}
 	int numberOfPages = fileHandle.getNumberOfPages();
-	for(int i=numberOfPages-1; i>0 ; i--) {
+	for(int i=numberOfPages-1; i>=0 ; i--) {
 		void *pageData = malloc(PAGE_SIZE);
 		fileHandle.readPage(i, pageData);
 		Page page = Page(pageData);
 		if(page.insertRecord(recordDescriptor, data, rid) == 0) {
 			rid.pageNum = i;
+			fileHandle.writePage(i, page.data);
 			return 0;
 		}
 	}
-	void *pageData = malloc(PAGE_SIZE);
-	Page page = Page(pageData);
-	if(page.insertRecord(recordDescriptor, data, rid) == 0) {
-		fileHandle.appendPage(pageData);
+	Page* pg = new Page();
+	if(pg->insertRecord(recordDescriptor, data, rid) == 0) {
+		fileHandle.appendPage(pg->data);
 		rid.pageNum = numberOfPages;
 		return 0;
 	}
+	free(pg);
 	return -1;
 }
 
@@ -79,5 +82,46 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
 }
 
 RC RecordBasedFileManager::printRecord(const vector<Attribute> &recordDescriptor, const void *data) {
-    return -1;
+	int nullBytes = ceil(recordDescriptor.size() / 8.0);
+	char * cursor = (char *) data;
+
+	unsigned char* nullstream  = (unsigned char*)malloc(nullBytes);
+	memcpy(nullstream,data,nullBytes);
+	bool nullarr[recordDescriptor.size()];
+
+	for(int i=0;  i<recordDescriptor.size(); i++){
+		int k = int(i/8);
+		nullarr[i] = nullstream[nullBytes-1-k] & (1<<((nullBytes*8)-1-i));
+	}
+	free(nullstream);
+
+	cursor += nullBytes;
+	cout << "Record:-";
+	for(int i=0; i<recordDescriptor.size(); i++) {
+		Attribute attr = recordDescriptor[i];
+		if(nullarr[i]) {
+			cout  << attr.name << ":" << "NULL" << "\t";
+			continue;
+		}
+		if (attr.type == TypeInt ) {
+			int * int_cursor = (int *)cursor;
+			cursor += sizeof(int);
+			cout  << attr.name << ":" << *int_cursor << "\t";
+		} else if(attr.type == TypeReal) {
+			float * float_cursor = (float *)cursor;
+			cursor += sizeof(float);
+			cout  << attr.name << ":" << *float_cursor << "\t";
+		} else {
+			int length = *((int *)cursor);
+			cursor += sizeof(int);
+			cout  << attr.name << ":";
+			for(int j=0; j<length; j++) {
+				cout << *cursor;
+				cursor += 1;
+			}
+			cout << "\t";
+		}
+	}
+	cout << endl;
+    return 0;
 }

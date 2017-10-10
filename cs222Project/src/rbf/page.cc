@@ -31,7 +31,7 @@ int Page::mapToObject(void* data) {
 int Page::getFreeSpaceOffset() {
 	char * cursor = (char*) this->data;
 	int offset = this->getFreeSpaceOffSetPointer();
-	int freeSpaceOffset = *(cursor + offset);
+	int freeSpaceOffset = *((int *)(cursor + offset));
 	return freeSpaceOffset;
 }
 
@@ -39,11 +39,12 @@ void Page::setFreeSpaceOffset(int value) {
 	char * cursor = (char*) this->data;
 	int offset = this->getFreeSpaceOffSetPointer();
 	cursor += offset;
+	int * valu = (int *)cursor;
 	memcpy(cursor, &value, sizeof(int));
 }
 
 int Page::getFreeSpaceOffSetPointer() {
-	return PAGE_SIZE - sizeof(int) - 1;
+	return PAGE_SIZE - sizeof(int);
 }
 
 int Page::getNumberOfSlots() {
@@ -82,17 +83,19 @@ int Page::getAvailableSpace() {
 RC Page::insertRecord(const vector<Attribute> &recordDescriptor,
 		const void *data, RID &rid) {
 //	record size + space for slots
-	int recordSize = this->getRecordSize(recordDescriptor, data);
+	int recordSize = Page::getRecordSize(recordDescriptor, data);
 	int spaceRequired = recordSize + 2 * sizeof(int);
 	if (this->getAvailableSpace() - spaceRequired >= 0) {
 		char* cursor = (char*) this->data;
 		int offset  = this->getFreeSpaceOffset();
 		memcpy(cursor + offset, data, recordSize);
-		int ns = this->getNumberOfSlots();
-		this->setSlot(ns, offset, recordSize);
-		this->setFreeSpaceOffset(offset+recordSize);
-		rid.slotNum = ns;
-		this->setNumberOfSlots(ns+1);
+		this->setNumberOfSlots(this->getNumberOfSlots()+1);
+		int currentSlot = this->getNumberOfSlots() - 1;
+		this->setSlot(currentSlot, offset, recordSize);
+		int newOffset = offset+recordSize;
+		this->setFreeSpaceOffset(newOffset);
+		newOffset = this->getFreeSpaceOffset();
+		rid.slotNum = currentSlot;
 		return 0;
 	} else {
 		return -1;
@@ -106,8 +109,10 @@ RC Page::setSlot(int &index, int &slot_offset, int &size) {
 		return -1;
 	}
 	int offset = this->getNumberOfSlotsPointer() - (8 * (index+1));
-	memcpy(cursor + offset, &slot_offset, 4);
-	memcpy(cursor + offset + 4, &size, 4);
+	memcpy(cursor + offset, &slot_offset, sizeof(int));
+	memcpy(cursor + offset + sizeof(int), &size, sizeof(int));
+	int a, b;
+	this->getSlot(index, a, b);
 	return 0;
 }
 
@@ -118,8 +123,8 @@ RC Page::getSlot(int &index, int &slot_offset, int &size) {
 		return -1;
 	}
 	int offset = this->getNumberOfSlotsPointer() - (8 * (index+1));
-	memcpy(&slot_offset, cursor + offset, 4);
-	memcpy(&size, cursor + offset + 4, 4);
+	memcpy(&slot_offset, cursor + offset, sizeof(int));
+	memcpy(&size, cursor + offset + sizeof(int), sizeof(int));
 	return 0;
 }
 
@@ -129,11 +134,23 @@ int Page::getRecordSize(const vector<Attribute> &recordDescriptor,
 	char* cursor = (char*) data;
 	int nullBytes = ceil(recordDescriptor.size() / 8.0);
 
+	unsigned char* nullstream  = (unsigned char*)malloc(nullBytes);
+	memcpy(nullstream,data,nullBytes);
+	bool nullarr[recordDescriptor.size()];
+
+	for(int i=0;  i<recordDescriptor.size(); i++){
+		int k = int(i/8);
+		nullarr[i] = nullstream[nullBytes-1-k] & (1<<((nullBytes*8)-1-i));
+	}
+	free(nullstream);
 	size += nullBytes;
 	cursor += nullBytes;
 
 	for (int i = 0; i < recordDescriptor.size(); i++) {
 		Attribute attr = recordDescriptor[i];
+		if(nullarr[i]){
+			continue;
+		}
 		if (attr.type == TypeInt || attr.type == TypeReal) {
 			size += 4;
 			cursor += 4;
@@ -150,4 +167,5 @@ int Page::getRecordSize(const vector<Attribute> &recordDescriptor,
 }
 
 Page::~Page() {
+	free(this->data);
 }

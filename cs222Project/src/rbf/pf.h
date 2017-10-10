@@ -27,6 +27,7 @@ public:
 	int getPointerToPageByIndex(int num);
 	int getNextPageId();
 	string getPagePathFromPageId(int pageId);
+	void printPages();
 };
 
 #endif

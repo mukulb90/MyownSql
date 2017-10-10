@@ -24,7 +24,7 @@ public:
 	int getNumberOfSlotsPointer();
 	int getAvailableSpace();
 	RC insertRecord(const vector<Attribute> &recordDescriptor, const void *data, RID &rid);
-	int getRecordSize(const vector<Attribute> &recordDescriptor, const void *data);
+	static int getRecordSize(const vector<Attribute> &recordDescriptor, const void *data);
 	RC setSlot(int &index, int &offset, int &size);
 	RC getSlot(int &index, int &offset, int &size);
 };

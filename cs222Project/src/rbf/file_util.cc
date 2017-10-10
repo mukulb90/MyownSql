@@ -4,7 +4,9 @@ using namespace std;
 
 bool fileExists(string fileName) {
 	FILE* handle = fopen(fileName.c_str(), "rb");
-	return handle != 0;
+	bool exists = handle != 0;
+	fclose(handle);
+	return exists;
 }
 
 unsigned long fsize(char * fileName) {
