@@ -78,6 +78,10 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 		if(page->insertRecord(recordDescriptor, data, rid) == 0) {
 			rid.pageNum = i;
 			fileHandle.writePage(i, page->data);
+			free(pages[i]);
+			pages[i] = NULL;
+			page->data = NULL;
+			delete page;
 			return 0;
 		}
 		free(pages[i]);
