@@ -20,6 +20,8 @@ int main(int argc, char **argv) {
 	assert(page->getNumberOfSlots() == 2);
 	assert(offset == 10);
 	assert(size == 2);
+
 	cout << "All Test Case Passed Successfully" << endl;
+
 	return 0;
 }

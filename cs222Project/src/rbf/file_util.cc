@@ -5,7 +5,9 @@ using namespace std;
 bool fileExists(string fileName) {
 	FILE* handle = fopen(fileName.c_str(), "rb");
 	bool exists = handle != 0;
-	fclose(handle);
+	if(exists) {
+		fclose(handle);
+	}
 	return exists;
 }
 

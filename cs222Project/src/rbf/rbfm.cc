@@ -1,3 +1,4 @@
+#include <string.h>
 #include "rbfm.h"
 #include "page.h"
 #include "math.h"
@@ -53,6 +54,7 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 		if(page.insertRecord(recordDescriptor, data, rid) == 0) {
 			rid.pageNum = i;
 			fileHandle.writePage(i, page.data);
+			cout << "Inserted record at page:"<< rid.pageNum << "and slot " << rid.slotNum << endl;
 			return 0;
 		}
 	}
@@ -60,6 +62,7 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 	if(pg->insertRecord(recordDescriptor, data, rid) == 0) {
 		fileHandle.appendPage(pg->data);
 		rid.pageNum = numberOfPages;
+		cout << "Inserted record at page:"<< rid.pageNum << "and slot " << rid.slotNum <<endl;
 		return 0;
 	}
 	free(pg);

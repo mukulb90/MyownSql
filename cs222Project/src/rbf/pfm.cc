@@ -1,10 +1,11 @@
 #include "pfm.h"
-
+#include <string.h>
 #include <stdlib.h>
 #include <cstdio>
 #include <exception>
 #include <fstream>
 #include <stdio.h>
+#include <string.h>
 
 #include "pf.h"
 #include "page.h"
@@ -35,7 +36,7 @@ RC PagedFileManager::createFile(const string &fileName) {
 	}
 	PagedFile* file = new PagedFile(fileName);
 	file->serialize(fileName);
-	delete file;
+	free(file);
 	return 0;
 }
 
@@ -63,6 +64,9 @@ RC PagedFileManager::openFile(const string &fileName, FileHandle &fileHandle) {
 	fclose(handle);
 	PagedFile* file = new PagedFile(fileName);
 	file->deserialize(fileName);
+	if(strcmp(file->name.c_str(), fileName.c_str()) != 0) {
+		return -1;
+	}
 	fileHandle.setPagedFile(file);
 	return 0;
 }
@@ -86,7 +90,6 @@ FileHandle::FileHandle() {
 }
 
 FileHandle::~FileHandle() {
-	fclose(this->serializerHandle);
 }
 
 RC FileHandle::readPage(PageNum pageNum, void *data) {
