@@ -5,6 +5,10 @@
 
 using namespace std;
 
+Serializable::~Serializable() {
+
+}
+
 int Serializable::deserialize(string fileName) {
 	int size = fsize((char*)fileName.c_str());
 	void* buffer = malloc(size);

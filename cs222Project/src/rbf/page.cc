@@ -167,5 +167,7 @@ int Page::getRecordSize(const vector<Attribute> &recordDescriptor,
 }
 
 Page::~Page() {
-	free(this->data);
+	if(this->data != 0){
+//		free(this->data);
+	}
 }

@@ -48,6 +48,7 @@ public:
 	FileHandle();                                         // Default constructor
 	~FileHandle();                                                 // Destructor
 
+	RC internalReadPage(PageNum pageNum, void *data, bool shouldAffectCounters);
 	RC readPage(PageNum pageNum, void *data);             // Get a specific page
 	RC writePage(PageNum pageNum, const void *data);    // Write a specific page
 	RC appendPage(const void *data);                   // Append a specific page

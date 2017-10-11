@@ -1,7 +1,13 @@
 #include <string.h>
+#include <thread>
+#include <vector>
+#include <string.h>
+
 #include "rbfm.h"
 #include "page.h"
 #include "math.h"
+
+using namespace std;
 
 RecordBasedFileManager* RecordBasedFileManager::_rbf_manager = 0;
 
@@ -47,25 +53,51 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 		return -1;
 	}
 	int numberOfPages = fileHandle.getNumberOfPages();
-	for(int i=numberOfPages-1; i>=0 ; i--) {
+
+	vector<thread*> threads;
+	vector<void*> pages;
+
+	int numOfThreads = 0;
+	for(int i=0; i<=numberOfPages-1 ; i++) {
 		void *pageData = malloc(PAGE_SIZE);
-		fileHandle.readPage(i, pageData);
-		Page page = Page(pageData);
-		if(page.insertRecord(recordDescriptor, data, rid) == 0) {
-			rid.pageNum = i;
-			fileHandle.writePage(i, page.data);
-			cout << "Inserted record at page:"<< rid.pageNum << "and slot " << rid.slotNum << endl;
-			return 0;
+		pages.push_back(pageData);
+		thread* tr = new thread(&FileHandle::internalReadPage, fileHandle, i, pageData, false);
+		threads.push_back(tr);
+		numOfThreads++;
+	}
+
+	for(int i=numberOfPages-1; i>=0 ; i--) {
+		if(threads[i]->joinable()){
+			threads[i]->join();
 		}
 	}
+
+	for(int i=numberOfPages-1; i>=0 ; i--) {
+		delete threads[i];
+		Page* page = new Page(pages[i]);
+		if(page->insertRecord(recordDescriptor, data, rid) == 0) {
+			rid.pageNum = i;
+			fileHandle.writePage(i, page->data);
+			return 0;
+		}
+		free(pages[i]);
+		pages[i] = NULL;
+		page->data = NULL;
+		delete page;
+	}
+
+	pages.clear();
+
 	Page* pg = new Page();
 	if(pg->insertRecord(recordDescriptor, data, rid) == 0) {
 		fileHandle.appendPage(pg->data);
 		rid.pageNum = numberOfPages;
-		cout << "Inserted record at page:"<< rid.pageNum << "and slot " << rid.slotNum <<endl;
+		free(pg->data);
+		delete pg;
 		return 0;
 	}
-	free(pg);
+	free(pg->data);
+	delete pg;
 	return -1;
 }
 

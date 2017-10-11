@@ -55,6 +55,9 @@ int PagedFile::mapToObject(void* data) {
 	char * name = (char*)malloc(sizeof(sizeOfFileName));
 	memcpy(name, cursor, sizeOfFileName);
 	this->name = string(name);
+
+	//	#LOCUS
+	free(name);
 	cursor += sizeOfFileName;
 
 	memcpy(&(this->numberOfPages), cursor, sizeof(int));

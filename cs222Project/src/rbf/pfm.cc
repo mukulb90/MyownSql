@@ -36,7 +36,7 @@ RC PagedFileManager::createFile(const string &fileName) {
 	}
 	PagedFile* file = new PagedFile(fileName);
 	file->serialize(fileName);
-	free(file);
+	delete file;
 	return 0;
 }
 
@@ -93,20 +93,25 @@ FileHandle::~FileHandle() {
 }
 
 RC FileHandle::readPage(PageNum pageNum, void *data) {
+	return this->internalReadPage(pageNum, data, true);
+}
+
+RC FileHandle::internalReadPage(PageNum pageNum, void *data, bool shouldAffectCounters) {
 	if(pageNum >= this->file->numberOfPages) {
 		return -1;
 	}
 	int pageId = this->file->pages.at(pageNum);
-		Page * page = new Page();
+		Page * page = new Page(data);
 		string pathName = this->file->getPagePathFromPageId(pageId);
 		page->deserialize(pathName);
-		memcpy(data, page->data, PAGE_SIZE);
-		data = page->data;
 
+		if(shouldAffectCounters) {
+			this->readPageCounter++;
+			string path = FILE_HANDLE_SERIALIZATION_LOCATION;
+			this->serialize(path);
+		}
 
-		this->readPageCounter++;
-		string path = FILE_HANDLE_SERIALIZATION_LOCATION;
-		this->serialize(path);
+		delete page;
 		return 0;
 }
 
@@ -120,6 +125,8 @@ RC FileHandle::writePage(PageNum pageNum, const void *data) {
 	string pathName = this->file->getPagePathFromPageId(pageId);
 	page->serialize(pathName);
 
+//	#LOCUS
+	delete page;
 //	Increment
 	this->writePageCounter++;
 	string path = FILE_HANDLE_SERIALIZATION_LOCATION;
@@ -145,6 +152,9 @@ RC FileHandle::appendPage(const void *data) {
 	this->appendPageCounter++;
 	string path = FILE_HANDLE_SERIALIZATION_LOCATION;
 	this->serialize(path);
+
+	//	#LOCUS
+	delete page;
 	return 0;
 }
 

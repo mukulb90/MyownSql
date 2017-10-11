@@ -9,6 +9,7 @@ using namespace std;
 class Serializable {
 public :
 
+	virtual ~Serializable();
 	int deserialize(string fileName);
 	int serialize(string fileName);
 

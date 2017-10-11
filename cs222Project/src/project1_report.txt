@@ -1,14 +1,13 @@
 1. Basic information
-Student ID : 
-Student Name : 
-OS (bit) :
+Student ID : 27087515
+Student Name : Mukul Bhardwaj
+OS (bit) :MacOs
 gcc version :
 
 
 2. Internal Record Format
 - Show your record format design and describe how your design satisfies O(1) field access. If not, just mention that you haven't implemented this feature.
 - Describe how you store a VarChar field.
-
 
 3. Page Format
 - Show your page format design
