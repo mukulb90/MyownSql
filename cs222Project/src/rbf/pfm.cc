@@ -61,6 +61,8 @@ RC PagedFileManager::openFile(const string &fileName, FileHandle &fileHandle) {
 	PagedFile* file = new PagedFile(fileName);
 	file->deserialize(fileName);
 	if(strcmp(file->name.c_str(), fileName.c_str()) != 0) {
+		cout << file->name << endl;
+		cout << fileName << endl;
 		return -1;
 	}
 	fileHandle.setPagedFile(file);
@@ -116,8 +118,9 @@ RC FileHandle::writePage(PageNum pageNum, const void *data) {
 	}
 
 	Page * page = this->file->pages[pageNum];
+//	this->file->serialize(this->file->name);
 	memcpy(page->data, data, PAGE_SIZE);
-	this->file->serialize(this->file->name);
+	page->serializeToOffset(this->file->name, this->file->getPageStartOffsetByIndex(pageNum), PAGE_SIZE);
 
 //	#LOCUS
 //	delete page;

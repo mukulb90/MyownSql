@@ -9,6 +9,7 @@ pfm.o: pfm.h
 rbfm.o: rbfm.h
 pf.o: pf.h
 page.o : page.h
+internal_record.o: internal_record.h
 
 # lib file dependencies
 librbf.a: librbf.a(pfm.o)
@@ -17,6 +18,7 @@ librbf.a: librbf.a(abstract_serializable.o)
 librbf.a: librbf.a(pf.o)
 librbf.a: librbf.a(rbfm.o)
 librbf.a: librbf.a(page.o)
+librbf.a: librbf.a(internal_record.o)
 
 # and possibly other .o files
 rbftest1.o: pfm.h rbfm.h

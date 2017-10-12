@@ -24,10 +24,8 @@ public:
 	int getNumberOfPages();
 	int mapFromObject(void* data);
 	int mapToObject(void* data);
-	int getPointerToPageByIndex(int num);
-	int getNextPageId();
-	string getPagePathFromPageId(int pageId);
-	void printPages();
+	int getPageStartOffsetByIndex(int num);
+	int getPageMetaDataSize();
 };
 
 #endif

@@ -3,7 +3,7 @@
 #include <stdlib.h>
 
 #include "page.h"
-
+#include "internal_record.h"
 
 Page::Page() {
 	this->data = (void *) malloc(PAGE_SIZE);
@@ -84,12 +84,13 @@ int Page::getAvailableSpace() {
 RC Page::insertRecord(const vector<Attribute> &recordDescriptor,
 		const void *data, RID &rid) {
 //	record size + space for slots
-	int recordSize = Page::getRecordSize(recordDescriptor, data);
+	int recordSize = InternalRecord::getInternalRecordBytes(recordDescriptor, data);
+	InternalRecord* internalRecord = InternalRecord::parse(recordDescriptor, data);
 	int spaceRequired = recordSize + 2 * sizeof(int);
 	if (this->getAvailableSpace() - spaceRequired >= 0) {
 		char* cursor = (char*) this->data;
 		int offset  = this->getFreeSpaceOffset();
-		memcpy(cursor + offset, data, recordSize);
+		memcpy(cursor + offset, internalRecord->data, recordSize);
 		this->setNumberOfSlots(this->getNumberOfSlots()+1);
 		int currentSlot = this->getNumberOfSlots() - 1;
 		this->setSlot(currentSlot, offset, recordSize);
@@ -166,102 +167,6 @@ int Page::getRecordSize(const vector<Attribute> &recordDescriptor,
 	}
 	return size;
 }
-
-//
-//int Page::getInternalRecordSize(const vector<Attribute> &recordDescriptor,
-//		const void *record) {
-//	int size = 0;
-//	char* cursor = (char*) record;
-//	int nullBytes = ceil(recordDescriptor.size() / 8.0);
-//
-//	unsigned char* nullstream  = (unsigned char*)malloc(nullBytes);
-//	memcpy(nullstream, record, nullBytes);
-//	bool nullarr[recordDescriptor.size()];
-//
-//	for(int i=0;  i<recordDescriptor.size(); i++){
-//		int k = int(i/8);
-//		nullarr[i] = nullstream[nullBytes-1-k] & (1<<((nullBytes*8)-1-i));
-//	}
-//	free(nullstream);
-//	unsigned short sizofOffsets = recordDescriptor.size()*sizeof(unsigned short);
-//
-//	size += sizofOffsets;
-//	cursor += nullBytes;
-//
-//	for (int i = 0; i < recordDescriptor.size(); i++) {
-//		Attribute attr = recordDescriptor[i];
-//		if(nullarr[i]){
-//			continue;
-//		}
-//		if (attr.type == TypeInt || attr.type == TypeReal) {
-//			size += 4;
-//			cursor += 4;
-//		} else {
-//			int length = *cursor;
-//			cursor += length;
-//			size += length;
-//		}
-//
-//	}
-//	return size;
-//}
-//
-//int Page::mapRecordToInternalRecord(const vector<Attribute> &recordDescriptor, const void *record, void* internalRecord) {
-//	char * cursor = (char *) record;
-//	char * internalCursor = (char *) internalRecord;
-//
-//	int nullBytes = ceil(recordDescriptor.size() / 8.0);
-//
-//	unsigned char* nullstream  = (unsigned char*)malloc(nullBytes);
-//	memcpy(nullstream, record, nullBytes);
-//	bool nullarr[recordDescriptor.size()];
-//
-//	for(int i=0;  i<recordDescriptor.size(); i++){
-//		int k = int(i/8);
-//		nullarr[i] = nullstream[nullBytes-1-k] & (1<<((nullBytes*8)-1-i));
-//	}
-//	free(nullstream);
-//	unsigned short sizofOffsets = recordDescriptor.size()*sizeof(unsigned short);
-//
-//	cursor += nullBytes;
-//	internalCursor += sizofOffsets;
-//	for (int i = 0; i < recordDescriptor.size(); i++) {
-//		Attribute attr = recordDescriptor[i];
-//		int offsetOfAttribute = sizeof(unsigned short)*i;
-//		memcpy(internalCursor+offsetOfAttribute, &internalCursor, sizeof(unsigned short));
-//
-//		if(nullarr[i]){
-//			continue;
-//		}
-//		if (attr.type == TypeInt || attr.type == TypeReal) {
-//			internalCursor += 4;
-//		} else {
-//			int length = *cursor;
-//			internalCursor += length;
-//		}
-//	}
-//	return 0;
-//}
-//
-//int Page::mapInternalRecordToRecord(const vector<Attribute> &recordDescriptor, const void *internalRecord, void* record) {
-//	char * cursor = (char *) record;
-//	char * internalCursor = (char *) internalRecord;
-//	int nullBytes = ceil(recordDescriptor.size() / 8.0);
-//
-//	for (int i = 0; i < recordDescriptor.size(); i++) {
-//			Attribute attr = recordDescriptor[i];
-//			unsigned short offsetOfAttribute = sizeof(unsigned short)*i;
-//			unsigned short offsetOfNextAttribute;
-//			if(i == recordDescriptor.size()-1) {
-//				offsetOfNextAttribute = NULL;
-//			}
-//			else {
-//				offsetOfNextAttribute = offsetOfAttribute+1;
-//			}
-//
-//	}
-//
-//}
 
 Page::~Page() {
 }

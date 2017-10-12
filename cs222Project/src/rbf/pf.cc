@@ -19,9 +19,7 @@ int PagedFile::getNumberOfPages() {
 
 int PagedFile::getBytes() {
 	int memoryOccupied = 0;
-	memoryOccupied += sizeof(int);
-	memoryOccupied += sizeof(char) * this->name.length();
-	memoryOccupied += sizeof(int);
+	memoryOccupied += this->getPageMetaDataSize();
 	memoryOccupied += (PAGE_SIZE * this->numberOfPages);
 	return memoryOccupied;
 }
@@ -73,19 +71,14 @@ int PagedFile::mapToObject(void* data) {
 	return 0;
 }
 
-//int PagedFile::getNextPageId() {
-//	return this->numberOfPages +1;
-//}
-//
-//string PagedFile::getPagePathFromPageId(int pageId) {
-//	return this->name + "-" + to_string(pageId);
-//}
-//
-//void PagedFile::printPages() {
-////	 	mght want to do this
-//	cout << endl;
-//		for(int i=0; i< this->pages.size(); i++) {
-//			cout << this->pages.at(i) << "\t";
-//		}
-//	cout <<endl;
-//}
+int PagedFile::getPageStartOffsetByIndex(int num) {
+	return this->getPageMetaDataSize() + num*PAGE_SIZE;
+}
+
+int PagedFile::getPageMetaDataSize(){
+	int memoryOccupied=0;
+	memoryOccupied += sizeof(int);
+	memoryOccupied += sizeof(char) * this->name.length();
+	memoryOccupied += sizeof(int);
+	return memoryOccupied;
+}

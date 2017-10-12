@@ -6,6 +6,7 @@
 #include "rbfm.h"
 #include "page.h"
 #include "math.h"
+#include "internal_record.h"
 
 using namespace std;
 
@@ -87,7 +88,11 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
 	int slotNumber = rid.slotNum;
 	page.getSlot(slotNumber, offset, size);
 	char * cursor = (char * ) pageData;
-	memcpy(data, cursor+offset, size);
+	void * internalData = (void*)malloc(size);
+	memcpy(internalData, cursor+offset, size);
+	InternalRecord * internalRecord = new InternalRecord();
+	internalRecord->data = internalData;
+	internalRecord->unParse(recordDescriptor, data, size);
 	return 0;
 }
 
