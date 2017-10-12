@@ -1,6 +1,7 @@
 #ifndef _pf_h_
 #define _pf_h_
 
+#include "page.h"
 #include <string>
 #include <sstream>
 #include <iostream>
@@ -12,12 +13,11 @@ using namespace std;
 class PagedFile: public Serializable {
 
 public:
-	int numberOfPages;
 	string name;
-	vector<int> pages;
+	int numberOfPages;
+	vector<Page *> pages;
 
 	PagedFile(string fileName);
-	PagedFile(string fileName, int numberOfPages);
 	~PagedFile();
 
 	int getBytes();

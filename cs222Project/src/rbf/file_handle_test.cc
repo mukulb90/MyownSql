@@ -5,7 +5,7 @@
 int main(int argc, char **argv) {
 
 	PagedFile * file = new PagedFile("test_pf_serialization");
-	file->pages.push_back(++file->numberOfPages);
+//	file->pages.push_back(++file->numberOfPages);
 	cout << file->pages.at(0) << endl;
 	file->serialize(file->name);
 

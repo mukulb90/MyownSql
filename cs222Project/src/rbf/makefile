@@ -1,6 +1,6 @@
 include ../makefile.inc
 
-all: librbf.a rbftest1 rbftest2 rbftest3 rbftest4 rbftest5 rbftest6 rbftest7 rbftest8 rbftest8b rbftest9 rbftest10 rbftest11 rbftest12 rbtest13 file_handle_test slot_test slot_directory_test
+all: librbf.a rbftest1 rbftest2 rbftest3 rbftest4 rbftest5 rbftest6 rbftest7 rbftest8 rbftest8b rbftest9 rbftest10 rbftest11 rbftest12 rbtest13 file_handle_test
 
 # c file dependencies
 abstract_serializable.o: abstract_serializable.h
@@ -9,8 +9,6 @@ pfm.o: pfm.h
 rbfm.o: rbfm.h
 pf.o: pf.h
 page.o : page.h
-slot.o : slot.h
-slot_directory.o : slot_directory.h
 
 # lib file dependencies
 librbf.a: librbf.a(pfm.o)
@@ -19,8 +17,6 @@ librbf.a: librbf.a(abstract_serializable.o)
 librbf.a: librbf.a(pf.o)
 librbf.a: librbf.a(rbfm.o)
 librbf.a: librbf.a(page.o)
-librbf.a: librbf.a(slot.o)
-librbf.a: librbf.a(slot_directory.o)
 
 # and possibly other .o files
 rbftest1.o: pfm.h rbfm.h
@@ -55,8 +51,6 @@ rbftest11: rbftest11.o librbf.a $(CODEROOT)/rbf/librbf.a
 rbftest12: rbftest12.o librbf.a $(CODEROOT)/rbf/librbf.a
 rbtest13: rbtest13.o librbf.a $(CODEROOT)/rbf/librbf.a
 file_handle_test: file_handle_test.o librbf.a $(CODEROOT)/rbf/librbf.a
-slot_test: slot_test.o librbf.a $(CODEROOT)/rbf/librbf.a
-slot_directory_test: slot_directory_test.o librbf.a $(CODEROOT)/rbf/librbf.a
 
 # dependencies to compile used libraries
 .PHONY: $(CODEROOT)/rbf/librbf.a

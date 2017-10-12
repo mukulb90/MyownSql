@@ -1,8 +1,9 @@
 #include <string.h>
 #include <math.h>
+#include <stdlib.h>
 
-#include "pfm.h"
 #include "page.h"
+
 
 Page::Page() {
 	this->data = (void *) malloc(PAGE_SIZE);
@@ -135,7 +136,7 @@ int Page::getRecordSize(const vector<Attribute> &recordDescriptor,
 	int nullBytes = ceil(recordDescriptor.size() / 8.0);
 
 	unsigned char* nullstream  = (unsigned char*)malloc(nullBytes);
-	memcpy(nullstream,data,nullBytes);
+	memcpy(nullstream, data, nullBytes);
 	bool nullarr[recordDescriptor.size()];
 
 	for(int i=0;  i<recordDescriptor.size(); i++){
@@ -166,8 +167,101 @@ int Page::getRecordSize(const vector<Attribute> &recordDescriptor,
 	return size;
 }
 
+//
+//int Page::getInternalRecordSize(const vector<Attribute> &recordDescriptor,
+//		const void *record) {
+//	int size = 0;
+//	char* cursor = (char*) record;
+//	int nullBytes = ceil(recordDescriptor.size() / 8.0);
+//
+//	unsigned char* nullstream  = (unsigned char*)malloc(nullBytes);
+//	memcpy(nullstream, record, nullBytes);
+//	bool nullarr[recordDescriptor.size()];
+//
+//	for(int i=0;  i<recordDescriptor.size(); i++){
+//		int k = int(i/8);
+//		nullarr[i] = nullstream[nullBytes-1-k] & (1<<((nullBytes*8)-1-i));
+//	}
+//	free(nullstream);
+//	unsigned short sizofOffsets = recordDescriptor.size()*sizeof(unsigned short);
+//
+//	size += sizofOffsets;
+//	cursor += nullBytes;
+//
+//	for (int i = 0; i < recordDescriptor.size(); i++) {
+//		Attribute attr = recordDescriptor[i];
+//		if(nullarr[i]){
+//			continue;
+//		}
+//		if (attr.type == TypeInt || attr.type == TypeReal) {
+//			size += 4;
+//			cursor += 4;
+//		} else {
+//			int length = *cursor;
+//			cursor += length;
+//			size += length;
+//		}
+//
+//	}
+//	return size;
+//}
+//
+//int Page::mapRecordToInternalRecord(const vector<Attribute> &recordDescriptor, const void *record, void* internalRecord) {
+//	char * cursor = (char *) record;
+//	char * internalCursor = (char *) internalRecord;
+//
+//	int nullBytes = ceil(recordDescriptor.size() / 8.0);
+//
+//	unsigned char* nullstream  = (unsigned char*)malloc(nullBytes);
+//	memcpy(nullstream, record, nullBytes);
+//	bool nullarr[recordDescriptor.size()];
+//
+//	for(int i=0;  i<recordDescriptor.size(); i++){
+//		int k = int(i/8);
+//		nullarr[i] = nullstream[nullBytes-1-k] & (1<<((nullBytes*8)-1-i));
+//	}
+//	free(nullstream);
+//	unsigned short sizofOffsets = recordDescriptor.size()*sizeof(unsigned short);
+//
+//	cursor += nullBytes;
+//	internalCursor += sizofOffsets;
+//	for (int i = 0; i < recordDescriptor.size(); i++) {
+//		Attribute attr = recordDescriptor[i];
+//		int offsetOfAttribute = sizeof(unsigned short)*i;
+//		memcpy(internalCursor+offsetOfAttribute, &internalCursor, sizeof(unsigned short));
+//
+//		if(nullarr[i]){
+//			continue;
+//		}
+//		if (attr.type == TypeInt || attr.type == TypeReal) {
+//			internalCursor += 4;
+//		} else {
+//			int length = *cursor;
+//			internalCursor += length;
+//		}
+//	}
+//	return 0;
+//}
+//
+//int Page::mapInternalRecordToRecord(const vector<Attribute> &recordDescriptor, const void *internalRecord, void* record) {
+//	char * cursor = (char *) record;
+//	char * internalCursor = (char *) internalRecord;
+//	int nullBytes = ceil(recordDescriptor.size() / 8.0);
+//
+//	for (int i = 0; i < recordDescriptor.size(); i++) {
+//			Attribute attr = recordDescriptor[i];
+//			unsigned short offsetOfAttribute = sizeof(unsigned short)*i;
+//			unsigned short offsetOfNextAttribute;
+//			if(i == recordDescriptor.size()-1) {
+//				offsetOfNextAttribute = NULL;
+//			}
+//			else {
+//				offsetOfNextAttribute = offsetOfAttribute+1;
+//			}
+//
+//	}
+//
+//}
+
 Page::~Page() {
-	if(this->data != 0){
-//		free(this->data);
-	}
 }

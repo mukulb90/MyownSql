@@ -54,43 +54,14 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 	}
 	int numberOfPages = fileHandle.getNumberOfPages();
 
-	vector<thread*> threads;
-	vector<void*> pages;
-
-	int numOfThreads = 0;
-	for(int i=0; i<=numberOfPages-1 ; i++) {
-		void *pageData = malloc(PAGE_SIZE);
-		pages.push_back(pageData);
-		thread* tr = new thread(&FileHandle::internalReadPage, fileHandle, i, pageData, false);
-		threads.push_back(tr);
-		numOfThreads++;
-	}
-
 	for(int i=numberOfPages-1; i>=0 ; i--) {
-		if(threads[i]->joinable()){
-			threads[i]->join();
-		}
-	}
-
-	for(int i=numberOfPages-1; i>=0 ; i--) {
-		delete threads[i];
-		Page* page = new Page(pages[i]);
+		Page* page = fileHandle.file->pages[i];
 		if(page->insertRecord(recordDescriptor, data, rid) == 0) {
 			rid.pageNum = i;
 			fileHandle.writePage(i, page->data);
-			free(pages[i]);
-			pages[i] = NULL;
-			page->data = NULL;
-			delete page;
 			return 0;
 		}
-		free(pages[i]);
-		pages[i] = NULL;
-		page->data = NULL;
-		delete page;
 	}
-
-	pages.clear();
 
 	Page* pg = new Page();
 	if(pg->insertRecord(recordDescriptor, data, rid) == 0) {

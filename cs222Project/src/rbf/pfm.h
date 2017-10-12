@@ -1,14 +1,11 @@
 #ifndef _pfm_h_
 #define _pfm_h_
 
-typedef unsigned PageNum;
-typedef int RC;
-typedef char byte;
-
-#define PAGE_SIZE 4096
+#include "common.h"
 #include <string>
 #include <climits>
 #include <stdio.h>
+
 #include "pf.h"
 #include "abstract_serializable.h"
 

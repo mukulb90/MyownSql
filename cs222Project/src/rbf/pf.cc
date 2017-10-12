@@ -1,4 +1,5 @@
 #include "pf.h"
+#include "page.h"
 #include <string.h>
 
 using namespace std;
@@ -21,7 +22,7 @@ int PagedFile::getBytes() {
 	memoryOccupied += sizeof(int);
 	memoryOccupied += sizeof(char) * this->name.length();
 	memoryOccupied += sizeof(int);
-	memoryOccupied += (sizeof(int) * this->numberOfPages);
+	memoryOccupied += (PAGE_SIZE * this->numberOfPages);
 	return memoryOccupied;
 }
 
@@ -39,8 +40,9 @@ int PagedFile::mapFromObject(void* data) {
 	cursor += sizeof(int);
 
 	for(int i=0; i<this->numberOfPages; i++) {
-		memcpy(cursor, &(this->pages[i]), sizeof(int));
-		cursor += sizeof(int);
+		Page* page = this->pages[i];
+		memcpy(cursor, page->data, PAGE_SIZE);
+		cursor += PAGE_SIZE;
 	}
 	return 0;
 }
@@ -56,7 +58,6 @@ int PagedFile::mapToObject(void* data) {
 	memcpy(name, cursor, sizeOfFileName);
 	this->name = string(name);
 
-	//	#LOCUS
 	free(name);
 	cursor += sizeOfFileName;
 
@@ -64,27 +65,27 @@ int PagedFile::mapToObject(void* data) {
 	cursor += sizeof(int);
 
 	for(int i=0; i<this->numberOfPages; i++) {
-		int pageId;
-		memcpy(&pageId, cursor, sizeof(int));
-		this->pages.push_back(pageId);
-		cursor += sizeof(int);
+		Page * page = new Page();
+		memcpy(page->data, cursor, PAGE_SIZE);
+		this->pages.push_back(page);
+		cursor += PAGE_SIZE;
 	}
 	return 0;
 }
 
-int PagedFile::getNextPageId() {
-	return this->numberOfPages +1;
-}
-
-string PagedFile::getPagePathFromPageId(int pageId) {
-	return this->name + "-" + to_string(pageId);
-}
-
-void PagedFile::printPages() {
-//	 	mght want to do this
-	cout << endl;
-		for(int i=0; i< this->pages.size(); i++) {
-			cout << this->pages.at(i) << "\t";
-		}
-	cout <<endl;
-}
+//int PagedFile::getNextPageId() {
+//	return this->numberOfPages +1;
+//}
+//
+//string PagedFile::getPagePathFromPageId(int pageId) {
+//	return this->name + "-" + to_string(pageId);
+//}
+//
+//void PagedFile::printPages() {
+////	 	mght want to do this
+//	cout << endl;
+//		for(int i=0; i< this->pages.size(); i++) {
+//			cout << this->pages.at(i) << "\t";
+//		}
+//	cout <<endl;
+//}

@@ -1,9 +1,11 @@
 #ifndef _page_h_
 #define _page_h_
 
+#include <vector>
+
 #include "abstract_serializable.h"
 #include "slot.h"
-#include "rbfm.h"
+#include "common.h"
 
 class Page: public Serializable {
 public:
@@ -27,5 +29,9 @@ public:
 	static int getRecordSize(const vector<Attribute> &recordDescriptor, const void *data);
 	RC setSlot(int &index, int &offset, int &size);
 	RC getSlot(int &index, int &offset, int &size);
+//	static int mapRecordToInternalRecord(const vector<Attribute> &recordDescriptor, const void *data, void* internalRecord);
+//	static int mapInternalRecordToRecord(const vector<Attribute> &recordDescriptor, const void *internalRecord, void* record);
+//	static int getInternalRecordSize(const vector<Attribute> &recordDescriptor, const void *data);
+
 };
 #endif
