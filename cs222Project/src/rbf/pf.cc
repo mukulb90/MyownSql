@@ -26,7 +26,7 @@ int PagedFile::getBytes() {
 
 int PagedFile::mapFromObject(void* data) {
 	char * cursor = (char *)data;
-	int sizeOfFileName = this->name.length();
+	int sizeOfFileName = this->name.length()+1;
 
 	memcpy(cursor, &sizeOfFileName, sizeof(int));
 	cursor += sizeof(int);
@@ -78,7 +78,7 @@ int PagedFile::getPageStartOffsetByIndex(int num) {
 int PagedFile::getPageMetaDataSize(){
 	int memoryOccupied=0;
 	memoryOccupied += sizeof(int);
-	memoryOccupied += sizeof(char) * this->name.length();
+	memoryOccupied += sizeof(char) * this->name.length()+1;
 	memoryOccupied += sizeof(int);
 	return memoryOccupied;
 }
