@@ -97,15 +97,6 @@ InternalRecord* InternalRecord::parse(const vector<Attribute> &recordDescriptor,
 	}
 
 	record->data = internalData;
-	char * ref = (char *)record->data;
-	for (int i = 0; i < recordDescriptor.size(); ++i) {
-		Attribute attr = recordDescriptor[i];
-		if (attr.type == TypeInt || attr.type == TypeReal) {
-		}
-		else {
-
-		}
-	}
 	return record;
 }
 
@@ -116,6 +107,7 @@ RC InternalRecord::unParse(const vector<Attribute> &recordDescriptor, void* data
 
 	vector<bool> nullIndicator;
 	vector<int> lengthOfAttributes;
+
 	for (int i = 0; i < recordDescriptor.size()-1; i++) {
 		unsigned short startOffset = *(unsigned short*)(internalCursor+i*2);
 		unsigned short endOffSet = *(unsigned short*)(internalCursor+(i+1)*2);
@@ -143,13 +135,16 @@ RC InternalRecord::unParse(const vector<Attribute> &recordDescriptor, void* data
 	}
 
 	char * cursor = (char * )data;
+	int k = 0;
 	for (int i = 0; i < numberOfNullBytes; ++i) {
 		 unsigned char byte = 0;
 		 for (int i=0; i < 8; ++i){
-			 if (nullIndicator[i]){
-				byte |= 1 << i;
+			 if (nullIndicator[k]){
+				byte |= 1 << (8-i-1);
 			 }
+			 k++;
 		 }
+
 	 memcpy(cursor, &byte, sizeof(unsigned char));
 	 cursor += sizeof(unsigned char);
 	}
