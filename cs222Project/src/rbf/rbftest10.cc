@@ -30,7 +30,7 @@ int RBFTest_10(RecordBasedFileManager *rbfm) {
     rc = rbfm->openFile(fileName, fileHandle);
     assert(rc == success && "Opening the file should not fail.");
     
-    int numRecords = 2;
+    int numRecords = 2000;
     void *record = malloc(1000);
     void *returnedData = malloc(1000);
 

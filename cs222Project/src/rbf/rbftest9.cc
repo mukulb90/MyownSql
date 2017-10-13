@@ -39,7 +39,7 @@ int RBFTest_9(RecordBasedFileManager *rbfm, vector<RID> &rids, vector<int> &size
 
     RID rid; 
     void *record = malloc(1000);
-    int numRecords = 2;
+    int numRecords = 2000;
 
     vector<Attribute> recordDescriptor;
     createLargeRecordDescriptor(recordDescriptor);
