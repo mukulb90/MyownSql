@@ -27,7 +27,7 @@ Record Format :-
 
 
 
-|(n+1) OffsetArray | (n) ByteArray |
+Null bit indicator|(n+1) OffsetArray | (n) ByteArray |
 Total size of each record :- (n+1)*sizeof(unsigned float) + 
 
 Let us assume there are n attributes.
