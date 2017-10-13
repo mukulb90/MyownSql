@@ -1,22 +1,146 @@
 1. Basic information
 Student ID : 27087515
 Student Name : Mukul Bhardwaj
-OS (bit) :MacOs
-gcc version :
+OS (bit) : MacOs (64bit)
+gcc version :4.2.1
 
 
-2. Internal Record Format
+2. Internal Record Format:-
+
+Record Format :- 
+
+
+                    XXXXXXXXXXXXXXXXXXX
+             XX XXXXX                  XXXX
+          XXXX                            XXX
+      XXXX                                  XX
+    XXX                                      XXX
++--XX----+----------+--------+------------+---------+-----------+
+|        |          |        |  _   _     |         |         +-------------->    Fields stroring actual data
+|   20   |     46   |        |            |  field 1| field2    |
++--------+-----+-X--+--------+------------+---------------------+
+               | XX                                     XX
+               |  XXXXXXXXXXXXXX XXXXXXXXXXXXXXXXXXXX XXX
+               |
+               v
+             n+1 elemenets to store offsets
+
+
+
+|(n+1) OffsetArray | (n) ByteArray |
+Total size of each record :- (n+1)*sizeof(unsigned float) + 
+
+Let us assume there are n attributes.
+At the beginning of each record, I have reserved an array of n+1 elements, each taking size of unsigned short, to store offsets to different fields.
+This extra space provides O(1)  access to any field and also helps in detecting NULL values very elegantly. Null can be very easily identified using below method:-
+
+	If current offset equals next offset => current element is NULL.
+
+These offsets also helped in storing fields of variable length, for eg. varchar. Field of any length, as long as it fits in the page, can be easily stored using this design. Length of any record can be calculated in constant time by subtracting positions stored in its offset and next offset.
+
+
 - Show your record format design and describe how your design satisfies O(1) field access. If not, just mention that you haven't implemented this feature.
 - Describe how you store a VarChar field.
 
 3. Page Format
-- Show your page format design
 
 
-4. Implementation Detail
-- Other implementation details goes here.
+                                             o +--->   starting of r1
+
+                       +----------------+    l +--->   length of r1
++--------------+       |------+ +----+  |
+| File Metadata|       || r1  | |r2  |  |
++--------------+       +------+ +----+  |
+|    Page 1    |       | +----------+   |
++--------------+       | |   r3     |   |
+|    Page 2    |       | +----------+   |
++--------------+       |                |
+|      .       |       |                |
++--------------+       +--+------+------+
+|    Page n    |       || | o |l | || |------>  FreeSpace Offset
+|              |       |----------------|
++--------------+       +----------------+
+                                   |
+                                   v
+                                No of slots Occupied
 
 
-5. Other (optional)
-- Freely use this section to tell us about things that are related to the project 1, but not related to the other sections (optional)
+All pages which belong to the same file are physically stored in the same file. At the beginning of each file, I have reseved some space to store file metaData, such as fileName, fileName length, numberOfPages.
+Each of these stored values help in below functionality:-
+1. FileName and its length : In first few bytes of every file, I have stored fileName,  which acts like a signature and helps me identify files which have been created by PagedFileManager. So, if the file has not been created by PagedFileManager, it wouldn't have this basic metadata and functions like openfile would return -1 ;
+2. I have also stored number of pages in fileMetaData, which helps me identify number of pages without relying on size of a file.
+
+In each page, I start inserting actual records from one end and other information like number of slots, freeSpace Offset and slot directory for other end of the page. When a new records comes, I check (in reverse order ir. from n, n-1....1) whether it can fit in any existing page:-
+a. If it can, I insert tha record in that page and update rid.
+b. If it can not fit in any of the existing pages, I append the new page at the end and insert record in it.
+
+4. Implementation Detail:-
+Apart from interfaces which were already defined in the project, I have create few more to provide proper abstraction to different usecases like serialization, parsing and manipulating records, pages. 
+
+a. class Serializable {
+	public :
+
+		virtual ~Serializable();
+		int deserialize(string fileName);
+		int serialize(string fileName);
+		int deserializeToOffset(string fileName, int start, int size);
+		int serializeToOffset(string fileName,  int startOffset, int size);
+
+		virtual int getBytes() = 0;
+		virtual int mapFromObject(void* data) = 0;
+		virtual int mapToObject(void* data) = 0;
+	};
+
+This class abstracts all input/output operations required in the project and every object that needs to write/read from disk needs to extend from this class and implement 3 abstract methods.
+
+
+b. class PagedFile extends Serializable{
+	
+	}
+
+	pagedFileManager uses PagedFile class file to do almost anything on page.
+
+c. class Page: public Serializable {
+		public:
+			void * data;
+
+			Page();
+			Page(void * data);
+			~Page();
+
+			int getBytes();
+			int mapFromObject(void* data);
+			int mapToObject(void* data);
+			int getFreeSpaceOffset();
+			void setFreeSpaceOffset(int);
+			int getFreeSpaceOffSetPointer();
+			int getNumberOfSlots();
+			void setNumberOfSlots(int);
+			int getNumberOfSlotsPointer();
+			int getAvailableSpace();
+			RC insertRecord(const vector<Attribute> &recordDescriptor, const void *data, RID &rid);
+			static int getRecordSize(const vector<Attribute> &recordDescriptor, const void *data);
+			RC setSlot(int &index, int &offset, int &size);
+			RC getSlot(int &index, int &offset, int &size);
+
+		};
+
+	Helper class which provides to do a lot of operations on page byte array;
+
+d. class InternalRecord {
+
+	public :
+		void* data;
+
+		InternalRecord();
+		static int getInternalRecordBytes(const vector<Attribute> &recordDescriptor, const void* data);
+		static InternalRecord* parse(const vector<Attribute> &recordDescriptor,const void* data);
+		RC unParse(const vector<Attribute> &recordDescriptor, void* data, int size);
+		RC getBytes();
+
+	};
+
+	This class provides functionality to transform the input data in internalRecord format and and also convert it back to to the format user provided data when user asks for it.
+
+
 
