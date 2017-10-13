@@ -1,9 +1,9 @@
 #ifndef _internal_record_h_
 #define _internal_record_h_
 
-#import <vector>
+#include <vector>
 
-#import "common.h"
+#include "common.h"
 
 using namespace std;
 
@@ -17,7 +17,7 @@ public :
 	InternalRecord();
 	static int getInternalRecordBytes(const vector<Attribute> &recordDescriptor, const void* data);
 	static InternalRecord* parse(const vector<Attribute> &recordDescriptor,const void* data);
-	RC unParse(const vector<Attribute> &recordDescriptor, void* data, int size);
+	RC unParse(const vector<Attribute> &recordDescriptor, void* data);
 	RC getBytes();
 
 };

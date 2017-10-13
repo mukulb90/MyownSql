@@ -92,7 +92,7 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
 	memcpy(internalData, cursor+offset, size);
 	InternalRecord * internalRecord = new InternalRecord();
 	internalRecord->data = internalData;
-	internalRecord->unParse(recordDescriptor, data, size);
+	internalRecord->unParse(recordDescriptor, data);
 	return 0;
 }
 

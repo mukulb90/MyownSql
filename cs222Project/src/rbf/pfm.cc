@@ -61,8 +61,6 @@ RC PagedFileManager::openFile(const string &fileName, FileHandle &fileHandle) {
 	PagedFile* file = new PagedFile(fileName);
 	file->deserialize(fileName);
 	if(strcmp(file->name.c_str(), fileName.c_str()) != 0) {
-		cout << file->name << endl;
-		cout << fileName << endl;
 		return -1;
 	}
 	fileHandle.setPagedFile(file);
