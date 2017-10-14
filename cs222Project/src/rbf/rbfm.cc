@@ -31,6 +31,7 @@ RecordBasedFileManager::~RecordBasedFileManager()
 
 RC RecordBasedFileManager::createFile(const string &fileName) {
 	PagedFileManager* pfm = PagedFileManager::instance();
+	cout << "Hello World";
 	return pfm->createFile(fileName);
 }
 
