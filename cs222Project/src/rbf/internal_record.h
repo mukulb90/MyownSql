@@ -19,6 +19,7 @@ public :
 	static InternalRecord* parse(const vector<Attribute> &recordDescriptor,const void* data);
 	RC unParse(const vector<Attribute> &recordDescriptor, void* data);
 	RC getBytes();
+	RC getAttributeByIndex(const int &index, const vector<Attribute> &recordDescriptor, void* attribute);
 
 };
 
