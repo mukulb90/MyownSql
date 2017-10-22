@@ -164,8 +164,12 @@ RC FileHandle::collectCounterValues(unsigned &readPageCount,
 }
 
 
-void FileHandle::setPagedFile(PagedFile* pagedFile) {
+void FileHandle::setPagedFile(PagedFile * pagedFile) {
 	this->file = pagedFile;
+	if(pagedFile != 0) {
+		FileHandle * handle = this;
+		pagedFile->setFileHandle(handle);
+	}
 }
 
 int FileHandle::getBytes() {
@@ -352,6 +356,7 @@ RC Page::insertRecord(const vector<Attribute> &recordDescriptor,
 		const void *data, RID &rid) {
 //	record size + space for slots
 	int recordSize = InternalRecord::getInternalRecordBytes(recordDescriptor, data);
+//	int recordSize = this->getRecordSize(recordDescriptor, data);
 	InternalRecord* internalRecord = InternalRecord::parse(recordDescriptor, data);
 	int spaceRequired = recordSize + 2 * sizeof(int);
 	if (this->getAvailableSpace() - spaceRequired >= 0) {
@@ -409,7 +414,7 @@ int Page::getRecordSize(const vector<Attribute> &recordDescriptor,
 
 	for(int i=0;  i<recordDescriptor.size(); i++){
 		int k = int(i/8);
-		nullarr[i] = nullstream[nullBytes-1-k] & (1<<((nullBytes*8)-1-i));
+		*(nullarr+i) = nullstream[k] & (1<<(7 - i%8));
 	}
 	free(nullstream);
 	size += nullBytes;
@@ -424,7 +429,7 @@ int Page::getRecordSize(const vector<Attribute> &recordDescriptor,
 			size += 4;
 			cursor += 4;
 		} else {
-			int length = *cursor;
+			int length = *((int *)cursor);
 			cursor += 4;
 			size += 4;
 			cursor += length;
@@ -446,6 +451,18 @@ PagedFile::PagedFile(string fileName) {
 
 
 PagedFile::~PagedFile() {
+}
+
+int PagedFile::setFileHandle(FileHandle *fileHandle) {
+	this->handle = fileHandle;
+	return 0;
+}
+
+Page* PagedFile::getPageByIndex(int index) {
+	this->handle->readPageCounter++;
+	string path = FILE_HANDLE_SERIALIZATION_LOCATION;
+	this->handle->serialize(path);
+	return this->pages[index];
 }
 
 int PagedFile::getNumberOfPages() {
@@ -531,12 +548,12 @@ bool* getNullBits(const vector<Attribute> &recordDescriptor, const void* data) {
 	int nullBytesSize = getNumberOfNullBytes(recordDescriptor);
 	unsigned char* nullstream  = (unsigned char*)malloc(nullBytesSize);
 		memcpy(nullstream, data, nullBytesSize);
-//# TODO free
+//# TODO
 		bool * nullarr = (bool *)malloc(recordDescriptor.size());
 
 		for(int i=0;  i<recordDescriptor.size(); i++){
 			int k = int(i/8);
-			*(nullarr+i) = nullstream[nullBytesSize-1-k] & (1<<((nullBytesSize*8)-1-i));
+			*(nullarr+i) = nullstream[k] & (1<<(7 - i%8));
 		}
 		free(nullstream);
 		return nullarr;
@@ -562,7 +579,7 @@ int InternalRecord::getInternalRecordBytes(const vector<Attribute> &recordDescri
 				size += 4;
 				cursor += 4;
 			} else {
-				int length = *cursor;
+				int length = *(int*)cursor;
 				cursor += 4;
 				cursor += length;
 				size += length;
@@ -603,7 +620,7 @@ InternalRecord* InternalRecord::parse(const vector<Attribute> &recordDescriptor,
 			insertionOffset += (unsigned short)4;
 			cursor += 4;
 		} else {
-		int length = *cursor;
+		int length = *(int*)cursor;
 		cursor += 4;
 		memcpy(internalCursor + i*sizeof(unsigned short), &insertionOffset, sizeof(unsigned short));
 		memcpy(startInternalCursor + insertionOffset, cursor, length);
@@ -625,10 +642,10 @@ RC InternalRecord::unParse(const vector<Attribute> &recordDescriptor, void* data
 	char * internalCursor = (char*)this->data;
 	char * cursor = (char *)data;
 
-	vector<bool> nullIndicator;
 	vector<int> lengthOfAttributes;
 
 	 memcpy(cursor, internalCursor, numberOfNullBytes);
+	 bool * nullBits = getNullBits(recordDescriptor, cursor);
 	 cursor += numberOfNullBytes;
 	 internalCursor += numberOfNullBytes;
 
@@ -638,18 +655,12 @@ RC InternalRecord::unParse(const vector<Attribute> &recordDescriptor, void* data
 		int length = endOffSet - startOffset;
 //		cout << i << "-" << length <<endl;
 		lengthOfAttributes.push_back(length);
-		if(length == 0){
-			nullIndicator.push_back(1);
-		}
-		else {
-			nullIndicator.push_back(0);
-		}
 	}
 
 
 	for(int i=0; i< recordDescriptor.size(); i++){
 		Attribute attr = recordDescriptor[i];
-		if(nullIndicator[i]){
+		if(*(nullBits + i)){
 			continue;
 		}
 		unsigned short offsetFromStart =  *(unsigned short*)(internalCursor+i*(sizeof(unsigned short)));
