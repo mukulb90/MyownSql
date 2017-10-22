@@ -4,9 +4,7 @@
 #include <string.h>
 
 #include "rbfm.h"
-#include "page.h"
 #include "math.h"
-#include "internal_record.h"
 
 using namespace std;
 
@@ -140,3 +138,27 @@ RC RecordBasedFileManager::printRecord(const vector<Attribute> &recordDescriptor
 	cout << endl;
     return 0;
 }
+
+RC RecordBasedFileManager::readAttribute(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, const string &attributeName, void *data) {
+	if(!fileHandle.file) {
+		return -1;
+	}
+	Page * page = fileHandle.file->pages[rid.pageNum];
+	int slotOffset, size;
+	int slotNum = rid.slotNum;
+	page->getSlot(slotNum, slotOffset, size);
+	void * record = malloc(size);
+	memcpy(record, (char *)page->data + slotOffset, size);
+	InternalRecord* ir = new InternalRecord();
+	ir->data = record;
+	int index = -1;
+	for(int i = 0; i< recordDescriptor.size(); i++) {
+		Attribute at = recordDescriptor[i];
+		if(at.name == attributeName) {
+			index = i;
+		}
+	}
+	ir->getAttributeByIndex(index, recordDescriptor, data);
+	return 0;
+}
+

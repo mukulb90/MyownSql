@@ -6,7 +6,6 @@
 #include <climits>
 
 #include "../rbf/pfm.h"
-#include "common.h"
 
 /********************************************************************************
 The scan iterator is NOT required to be implemented for the part 1 of the project 

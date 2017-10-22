@@ -1,16 +1,129 @@
 #ifndef _pfm_h_
 #define _pfm_h_
 
-#include "common.h"
 #include <string>
 #include <climits>
 #include <stdio.h>
-
-#include "pf.h"
-#include "abstract_serializable.h"
+#include <vector>
+#include <sstream>
+#include <iostream>
 
 #define FILE_HANDLE_SERIALIZATION_LOCATION  "access_stats.data";
+
 using namespace std;
+
+#include <string>
+#include <climits>
+#define PAGE_SIZE 4096
+
+using namespace std;
+
+// Record ID
+typedef struct
+{
+  unsigned pageNum;    // page number
+  unsigned slotNum;    // slot number in the page
+} RID;
+
+
+// Attribute
+typedef enum { TypeInt = 0, TypeReal, TypeVarChar } AttrType;
+
+typedef unsigned AttrLength;
+
+struct Attribute {
+    string   name;     // attribute name
+    AttrType type;     // attribute type
+    AttrLength length; // attribute length
+};
+
+// Comparison Operator (NOT needed for part 1 of the project)
+typedef enum { EQ_OP = 0, // no condition// =
+           LT_OP,      // <
+           LE_OP,      // <=
+           GT_OP,      // >
+           GE_OP,      // >=
+           NE_OP,      // !=
+           NO_OP       // no condition
+} CompOp;
+
+typedef unsigned PageNum;
+typedef int RC;
+typedef char byte;
+
+class Serializable {
+public :
+
+	virtual ~Serializable();
+	int deserialize(string fileName);
+	int serialize(string fileName);
+	int deserializeToOffset(string fileName, int start, int size);
+	int serializeToOffset(string fileName,  int startOffset, int size);
+
+	virtual int getBytes() = 0;
+	virtual int mapFromObject(void* data) = 0;
+	virtual int mapToObject(void* data) = 0;
+};
+
+
+class InternalRecord {
+
+private:
+
+public :
+	void* data;
+
+	InternalRecord();
+	static int getInternalRecordBytes(const vector<Attribute> &recordDescriptor, const void* data);
+	static InternalRecord* parse(const vector<Attribute> &recordDescriptor,const void* data);
+	RC unParse(const vector<Attribute> &recordDescriptor, void* data);
+	RC getBytes();
+	RC getAttributeByIndex(const int &index, const vector<Attribute> &recordDescriptor, void* attribute);
+
+};
+
+class Page: public Serializable {
+public:
+	void * data;
+
+	Page();
+	Page(void * data);
+	~Page();
+
+	int getBytes();
+	int mapFromObject(void* data);
+	int mapToObject(void* data);
+	int getFreeSpaceOffset();
+	void setFreeSpaceOffset(int);
+	int getFreeSpaceOffSetPointer();
+	int getNumberOfSlots();
+	void setNumberOfSlots(int);
+	int getNumberOfSlotsPointer();
+	int getAvailableSpace();
+	RC insertRecord(const vector<Attribute> &recordDescriptor, const void *data, RID &rid);
+	static int getRecordSize(const vector<Attribute> &recordDescriptor, const void *data);
+	RC setSlot(int &index, int &offset, int &size);
+	RC getSlot(int &index, int &offset, int &size);
+
+};
+
+class PagedFile: public Serializable {
+
+public:
+	string name;
+	int numberOfPages;
+	vector<Page *> pages;
+
+	PagedFile(string fileName);
+	~PagedFile();
+
+	int getBytes();
+	int getNumberOfPages();
+	int mapFromObject(void* data);
+	int mapToObject(void* data);
+	int getPageStartOffsetByIndex(int num);
+	int getPageMetaDataSize();
+};
 
 class FileHandle;
 
@@ -58,5 +171,10 @@ public:
 	int mapFromObject(void* data);
 	int mapToObject(void* data);
 };
+
+
+bool fileExists(string fileName);
+
+unsigned long fsize(char * fileName);
 
 #endif
