@@ -107,42 +107,7 @@ public:
 
 };
 
-class PagedFile: public Serializable {
-
-public:
-	string name;
-	int numberOfPages;
-	vector<Page *> pages;
-
-	PagedFile(string fileName);
-	~PagedFile();
-
-	int getBytes();
-	int getNumberOfPages();
-	int mapFromObject(void* data);
-	int mapToObject(void* data);
-	int getPageStartOffsetByIndex(int num);
-	int getPageMetaDataSize();
-};
-
-class FileHandle;
-
-class PagedFileManager {
-public:
-	static PagedFileManager* instance();   // Access to the _pf_manager instance
-
-	RC createFile(const string &fileName);                  // Create a new file
-	RC destroyFile(const string &fileName);                    // Destroy a file
-	RC openFile(const string &fileName, FileHandle &fileHandle);  // Open a file
-	RC closeFile(FileHandle &fileHandle);                        // Close a file
-
-protected:
-	PagedFileManager();                                           // Constructor
-	~PagedFileManager();                                           // Destructor
-
-private:
-	static PagedFileManager *_pf_manager;
-};
+class PagedFile;
 
 class FileHandle : public Serializable{
 
@@ -170,6 +135,47 @@ public:
 	int getBytes();
 	int mapFromObject(void* data);
 	int mapToObject(void* data);
+};
+
+class PagedFile: public Serializable {
+private:
+
+public:
+	string name;
+	int numberOfPages;
+	vector<Page *> pages;
+	FileHandle* handle;
+
+
+	PagedFile(string fileName);
+	~PagedFile();
+
+	Page* getPageByIndex(int index);
+	int getBytes();
+	int getNumberOfPages();
+	int mapFromObject(void* data);
+	int mapToObject(void* data);
+	int getPageStartOffsetByIndex(int num);
+	int getPageMetaDataSize();
+	int setFileHandle(FileHandle *fileHandle);
+};
+
+
+class PagedFileManager {
+public:
+	static PagedFileManager* instance();   // Access to the _pf_manager instance
+
+	RC createFile(const string &fileName);                  // Create a new file
+	RC destroyFile(const string &fileName);                    // Destroy a file
+	RC openFile(const string &fileName, FileHandle &fileHandle);  // Open a file
+	RC closeFile(FileHandle &fileHandle);                        // Close a file
+
+protected:
+	PagedFileManager();                                           // Constructor
+	~PagedFileManager();                                           // Destructor
+
+private:
+	static PagedFileManager *_pf_manager;
 };
 
 

@@ -54,7 +54,7 @@ RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Att
 	int numberOfPages = fileHandle.getNumberOfPages();
 
 	for(int i=numberOfPages-1; i>=0 ; i--) {
-		Page* page = fileHandle.file->pages[i];
+		Page* page = fileHandle.file->getPageByIndex(i);
 		if(page->insertRecord(recordDescriptor, data, rid) == 0) {
 			rid.pageNum = i;
 			fileHandle.writePage(i, page->data);

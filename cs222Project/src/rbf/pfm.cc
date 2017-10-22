@@ -164,8 +164,12 @@ RC FileHandle::collectCounterValues(unsigned &readPageCount,
 }
 
 
-void FileHandle::setPagedFile(PagedFile* pagedFile) {
+void FileHandle::setPagedFile(PagedFile * pagedFile) {
 	this->file = pagedFile;
+	if(pagedFile != 0) {
+		FileHandle * handle = this;
+		pagedFile->setFileHandle(handle);
+	}
 }
 
 int FileHandle::getBytes() {
@@ -447,6 +451,18 @@ PagedFile::PagedFile(string fileName) {
 
 
 PagedFile::~PagedFile() {
+}
+
+int PagedFile::setFileHandle(FileHandle *fileHandle) {
+	this->handle = fileHandle;
+	return 0;
+}
+
+Page* PagedFile::getPageByIndex(int index) {
+	this->handle->readPageCounter++;
+	string path = FILE_HANDLE_SERIALIZATION_LOCATION;
+	this->handle->serialize(path);
+	return this->pages[index];
 }
 
 int PagedFile::getNumberOfPages() {
