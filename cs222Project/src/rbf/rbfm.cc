@@ -4,9 +4,7 @@
 #include <string.h>
 
 #include "rbfm.h"
-#include "page.h"
 #include "math.h"
-#include "internal_record.h"
 
 using namespace std;
 
