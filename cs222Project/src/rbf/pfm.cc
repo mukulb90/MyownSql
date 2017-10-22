@@ -410,7 +410,7 @@ int Page::getRecordSize(const vector<Attribute> &recordDescriptor,
 
 	for(int i=0;  i<recordDescriptor.size(); i++){
 		int k = int(i/8);
-		nullarr[i] = nullstream[nullBytes-1-k] & (1<<((nullBytes*8)-1-i));
+		*(nullarr+i) = nullstream[k] & (1<<(7 - i%8));
 	}
 	free(nullstream);
 	size += nullBytes;
@@ -532,12 +532,12 @@ bool* getNullBits(const vector<Attribute> &recordDescriptor, const void* data) {
 	int nullBytesSize = getNumberOfNullBytes(recordDescriptor);
 	unsigned char* nullstream  = (unsigned char*)malloc(nullBytesSize);
 		memcpy(nullstream, data, nullBytesSize);
-//# TODO free
+//# TODO
 		bool * nullarr = (bool *)malloc(recordDescriptor.size());
 
 		for(int i=0;  i<recordDescriptor.size(); i++){
 			int k = int(i/8);
-			*(nullarr+i) = nullstream[nullBytesSize-1-k] & (1<<((nullBytesSize*8)-1-i));
+			*(nullarr+i) = nullstream[k] & (1<<(7 - i%8));
 		}
 		free(nullstream);
 		return nullarr;
@@ -626,10 +626,10 @@ RC InternalRecord::unParse(const vector<Attribute> &recordDescriptor, void* data
 	char * internalCursor = (char*)this->data;
 	char * cursor = (char *)data;
 
-	vector<bool> nullIndicator;
 	vector<int> lengthOfAttributes;
 
 	 memcpy(cursor, internalCursor, numberOfNullBytes);
+	 bool * nullBits = getNullBits(recordDescriptor, cursor);
 	 cursor += numberOfNullBytes;
 	 internalCursor += numberOfNullBytes;
 
@@ -639,18 +639,12 @@ RC InternalRecord::unParse(const vector<Attribute> &recordDescriptor, void* data
 		int length = endOffSet - startOffset;
 //		cout << i << "-" << length <<endl;
 		lengthOfAttributes.push_back(length);
-		if(length == 0){
-			nullIndicator.push_back(1);
-		}
-		else {
-			nullIndicator.push_back(0);
-		}
 	}
 
 
 	for(int i=0; i< recordDescriptor.size(); i++){
 		Attribute attr = recordDescriptor[i];
-		if(nullIndicator[i]){
+		if(*(nullBits + i)){
 			continue;
 		}
 		unsigned short offsetFromStart =  *(unsigned short*)(internalCursor+i*(sizeof(unsigned short)));

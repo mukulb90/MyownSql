@@ -104,7 +104,7 @@ RC RecordBasedFileManager::printRecord(const vector<Attribute> &recordDescriptor
 
 	for(int i=0;  i<recordDescriptor.size(); i++){
 		int k = int(i/8);
-		nullarr[i] = nullstream[nullBytes-1-k] & (1<<((nullBytes*8)-1-i));
+		*(nullarr+i) = nullstream[k] & (1<<(7 - i%8));
 	}
 	free(nullstream);
 
