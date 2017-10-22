@@ -352,6 +352,7 @@ RC Page::insertRecord(const vector<Attribute> &recordDescriptor,
 		const void *data, RID &rid) {
 //	record size + space for slots
 	int recordSize = InternalRecord::getInternalRecordBytes(recordDescriptor, data);
+//	int recordSize = this->getRecordSize(recordDescriptor, data);
 	InternalRecord* internalRecord = InternalRecord::parse(recordDescriptor, data);
 	int spaceRequired = recordSize + 2 * sizeof(int);
 	if (this->getAvailableSpace() - spaceRequired >= 0) {
@@ -424,7 +425,7 @@ int Page::getRecordSize(const vector<Attribute> &recordDescriptor,
 			size += 4;
 			cursor += 4;
 		} else {
-			int length = *cursor;
+			int length = *((int *)cursor);
 			cursor += 4;
 			size += 4;
 			cursor += length;
@@ -562,7 +563,7 @@ int InternalRecord::getInternalRecordBytes(const vector<Attribute> &recordDescri
 				size += 4;
 				cursor += 4;
 			} else {
-				int length = *cursor;
+				int length = *(int*)cursor;
 				cursor += 4;
 				cursor += length;
 				size += length;
@@ -603,7 +604,7 @@ InternalRecord* InternalRecord::parse(const vector<Attribute> &recordDescriptor,
 			insertionOffset += (unsigned short)4;
 			cursor += 4;
 		} else {
-		int length = *cursor;
+		int length = *(int*)cursor;
 		cursor += 4;
 		memcpy(internalCursor + i*sizeof(unsigned short), &insertionOffset, sizeof(unsigned short));
 		memcpy(startInternalCursor + insertionOffset, cursor, length);
