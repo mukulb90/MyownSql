@@ -202,10 +202,12 @@ int compare(const void* to, const void* from, const Attribute &attr) {
 	} else {
 		char * fromCursor = (char *) from;
 		char * toCursor = (char *) to;
-		fromCursor += sizeof(int);
+//		int fromLength = *((int*)fromCursor);
+		int toLength = *((int*)toCursor);
+//		fromCursor += sizeof(int);
 		toCursor += sizeof(int);
 		string fromString = string(fromCursor);
-		string toString = string(fromCursor);
+		string toString = string(toCursor, toLength);
 		return fromString.compare(toString);
 	}
 }

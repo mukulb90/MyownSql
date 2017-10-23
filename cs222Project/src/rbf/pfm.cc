@@ -684,6 +684,8 @@ RC InternalRecord::unParse(const vector<Attribute> &recordDescriptor, void* data
 }
 
 RC InternalRecord::getAttributeByIndex(const int &index, const vector<Attribute> &recordDescriptor, void * attribute) {
+	char * attributeCursor = (char * ) attribute;
+	Attribute attr = recordDescriptor[index];
 	char * cursor = (char *)this->data;
 	char * startCursor = (char *)this->data;
 	int numberOfNullBytes = getNumberOfNullBytes(recordDescriptor);
@@ -691,6 +693,11 @@ RC InternalRecord::getAttributeByIndex(const int &index, const vector<Attribute>
 	unsigned short offsetFromStart = *(unsigned short*)(cursor + sizeof(unsigned short)*index);
 	unsigned short nextOffsetFromStart = *(unsigned short*)(cursor + sizeof(unsigned short)*(index+1));
 	unsigned short numberOfBytes = nextOffsetFromStart - offsetFromStart;
-	memcpy(attribute, startCursor + offsetFromStart, numberOfBytes);
+	if(attr.type == TypeVarChar) {
+		int length = (int)numberOfBytes;
+		memcpy(attributeCursor, &length, sizeof(int));
+		attributeCursor += sizeof(int);
+	}
+	memcpy(attributeCursor, startCursor + offsetFromStart, numberOfBytes);
 	return 0;
 }
