@@ -122,6 +122,66 @@ int RBFTest_10(RecordBasedFileManager *rbfm) {
 
 	assert("number of records with id  not equal 1 should be 1999" && count == numRecords - 1);
 
+
+
+//	==============================================================================================
+		iterator = new RBFM_ScanIterator();
+		int query2 = 1000;
+		rbfm->scan(fileHandle, recordDescriptor, compareAttributeName , GT_OP, (void*)&query2 , projectedAttributes, *iterator);
+
+		count = 0;
+		while(iterator->getNextRecord(rid, returnedData) != -1) {
+			count++;
+		}
+		assert("number of records with id greater than 1000 should be equal to 999" && count == 999);
+
+// ===============================================================================================
+
+//	==============================================================================================
+		iterator = new RBFM_ScanIterator();
+		query2 = 1000;
+		rbfm->scan(fileHandle, recordDescriptor, compareAttributeName , GE_OP, (void*)&query2 , projectedAttributes, *iterator);
+
+		count = 0;
+		while(iterator->getNextRecord(rid, returnedData) != -1) {
+			count++;
+		}
+
+		assert("number of records with id greater than or equal to 1000 should be equal to 1001" && count == 1000);
+
+// ===============================================================================================
+
+//	==============================================================================================
+		iterator = new RBFM_ScanIterator();
+		query2 = 500;
+		rbfm->scan(fileHandle, recordDescriptor, compareAttributeName , LT_OP, (void*)&query2 , projectedAttributes, *iterator);
+
+		count = 0;
+		while(iterator->getNextRecord(rid, returnedData) != -1) {
+			if(count == 499) {
+				cout << "print";
+			}
+			count++;
+		}
+
+		assert("number of records with id less than 500 should be equal to 500" && count == 500);
+
+// ===============================================================================================
+
+//	==============================================================================================
+		iterator = new RBFM_ScanIterator();
+		query2 = 500;
+		rbfm->scan(fileHandle, recordDescriptor, compareAttributeName , LE_OP, (void*)&query2 , projectedAttributes, *iterator);
+
+		count = 0;
+		while(iterator->getNextRecord(rid, returnedData) != -1) {
+			count++;
+		}
+
+		assert("number of records with id less than or equalto 500 should be equal to 500" && count == 501);
+
+// ===============================================================================================
+
     cout << endl;
 
     // Close the file "test9"

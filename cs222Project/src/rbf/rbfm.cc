@@ -264,7 +264,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 				}
 				case LE_OP: {
 					if (compare(compAttrValue, this->value,
-							this->conditionAttribute) <= 0) {
+							this->conditionAttribute) >= 0) {
 						rbfm->readAttributes(this->fileHandle,
 								this->recordDescriptor, rid, this->attributeNames,
 								data);
@@ -276,7 +276,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 				}
 				case LT_OP: {
 					if (compare(compAttrValue, this->value,
-							this->conditionAttribute) <= 0) {
+							this->conditionAttribute) > 0) {
 						rbfm->readAttributes(this->fileHandle,
 								this->recordDescriptor, rid, this->attributeNames,
 								data);
@@ -288,7 +288,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 				}
 				case GT_OP: {
 					if (compare(compAttrValue, this->value,
-							this->conditionAttribute) > 0) {
+							this->conditionAttribute) < 0) {
 						rbfm->readAttributes(this->fileHandle,
 								this->recordDescriptor, rid, this->attributeNames,
 								data);
@@ -300,7 +300,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 				}
 				case GE_OP: {
 					if (compare(compAttrValue, this->value,
-							this->conditionAttribute) >= 0) {
+							this->conditionAttribute) <= 0) {
 						rbfm->readAttributes(this->fileHandle,
 								this->recordDescriptor, rid, this->attributeNames,
 								data);
