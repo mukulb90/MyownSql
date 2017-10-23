@@ -75,4 +75,34 @@ protected:
 
 };
 
+class TableCatalogRecord {
+
+private:
+	TableCatalogRecord(void *);
+
+
+public:
+	~TableCatalogRecord();
+
+	void* data;
+
+	static TableCatalogRecord* parse(const int &id, const string &tableName);
+	RC unParse(int &id, string &tableName);
+};
+
+
+class ColumnsCatalogRecord {
+
+private:
+	ColumnsCatalogRecord(void *);
+
+public:
+	~ColumnsCatalogRecord();
+
+	void* data;
+
+	static ColumnsCatalogRecord* parse(const int &tableId, const Attribute &attrs, const int &columnIndex);
+	RC unParse(int &tableId, Attribute &attrs, int &columnIndex);
+};
+
 #endif
