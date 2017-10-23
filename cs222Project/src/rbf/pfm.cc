@@ -447,6 +447,7 @@ Page::~Page() {
 PagedFile::PagedFile(string fileName) {
 	this->name = fileName;
 	this->numberOfPages = 0;
+	this->handle = 0;
 }
 
 
