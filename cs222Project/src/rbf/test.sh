@@ -22,3 +22,5 @@ make
 ./rbftest_p3
 ./rbftest_p4
 ./rbftest_p5
+./rbftest_delete
+./rbftest_update

@@ -86,12 +86,23 @@ RC RecordBasedFileManager::readRecord(FileHandle &fileHandle, const vector<Attri
 	int offset, size;
 	int slotNumber = rid.slotNum;
 	page.getSlot(slotNumber, offset, size);
+	if (size < 0){
+		return -1;
+	}
 	char * cursor = (char * ) pageData;
-	void * internalData = (void*)malloc(size);
-	memcpy(internalData, cursor+offset, size);
-	InternalRecord * internalRecord = new InternalRecord();
-	internalRecord->data = internalData;
-	internalRecord->unParse(recordDescriptor, data);
+	void * recordData = (void*)malloc(size);
+	memcpy(recordData, cursor+offset, size);
+	RecordForwarder * recordForwarder = new RecordForwarder();
+	recordForwarder->data = recordData;
+	recordForwarder->unparse(recordDescriptor, data);
+	if (recordForwarder->pageNum == -1) {
+		return 0;
+	} else {
+		RID redirectRID;
+		redirectRID.pageNum = recordForwarder->pageNum;
+		redirectRID.slotNum = recordForwarder->slotNum;
+		RecordBasedFileManager::readRecord(fileHandle, recordDescriptor, redirectRID, data);
+	}
 	return 0;
 }
 
@@ -163,3 +174,139 @@ RC RecordBasedFileManager::readAttribute(FileHandle &fileHandle, const vector<At
 	return 0;
 }
 
+RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle,
+		const vector<Attribute> &recordDescriptor, const RID &rid) {
+	if (!fileHandle.file) {
+		return -1;
+	}
+
+	void* pageData = malloc(PAGE_SIZE);
+	fileHandle.readPage(rid.pageNum, pageData);
+	Page page = Page(pageData);
+	int delRecOffset, delRecSize, currRecOffset, currRecRize;
+	int slotNumber = rid.slotNum;
+	int pageSlots = page.getNumberOfSlots();
+	page.getSlot(slotNumber, delRecOffset, delRecSize);
+
+	shiftRecords(delRecOffset,delRecSize, page);
+	updateSlotDir(delRecOffset, delRecSize, page,  pageSlots);
+
+	delRecSize = -999;
+	page.setSlot(slotNumber, delRecOffset, delRecSize);
+	page.setFreeSpaceOffset(page.getAvailableSpace() + delRecSize);
+	fileHandle.writePage(rid.pageNum, page.data);
+	free(pageData);
+	return 0;
+}
+
+RC RecordBasedFileManager::updateSlotDir(int &currRecordOffset, int &currRecordSize, Page &page, int pageSlots){
+	int offset,size;
+	for (int i=0; i<pageSlots; i++){
+			page.getSlot(i, offset, size);
+			if(offset>currRecordOffset && size>0){
+				offset = offset - currRecordSize;
+				page.setSlot(i,offset,currRecordSize);
+			}
+		}
+
+	return 0;
+}
+
+RC RecordBasedFileManager::shiftRecords(int &currRecordOffset, int &currRecordSize, Page &page){
+
+	int FreeSpaceOffset = page.getFreeSpaceOffset();
+	int rightSideDataSize = FreeSpaceOffset - currRecordOffset- currRecordSize -1;
+	memcpy((char*)page.data + currRecordOffset, (char*)page.data + currRecordOffset + currRecordSize, rightSideDataSize);
+	return 0;
+}
+
+
+RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle,
+		const vector<Attribute> &recordDescriptor, const void *data,
+		const RID &rid) {
+	// Update Available Space
+	if (!fileHandle.file) {
+		return -1;
+	}
+	void* pageData = malloc(PAGE_SIZE);
+	fileHandle.readPage(rid.pageNum, pageData);
+	Page page = Page(pageData);
+	int slotNumber = rid.slotNum;
+	int rOffset, rSize;
+	int freePageSpace = page.getAvailableSpace();
+	int pageSlots = page.getNumberOfSlots();
+	RecordForwarder* recordForwarder = RecordForwarder::parse(recordDescriptor,
+			data, rid,false);
+	int recordSize = recordForwarder->getInternalRecordBytes(recordDescriptor,
+			data,false);
+	int threshold = freePageSpace - recordSize;
+	page.getSlot(slotNumber, rOffset, rSize);
+
+	if (threshold > 0) {
+		threshold = recordSize - rSize;
+		if (threshold == 0) {
+			memcpy((char*) page.data + rOffset, (char*) recordForwarder->data,
+					rSize);
+			fileHandle.writePage(rid.pageNum, page.data);
+
+		} else {
+			RecordBasedFileManager::shiftNUpdateRecord(page, threshold,slotNumber, rOffset, rSize, pageSlots, recordSize,recordForwarder, fileHandle);
+			fileHandle.writePage(rid.pageNum, page.data);
+
+
+		}
+	} else {
+		RID Updatedrid;
+		this->insertRecord(fileHandle, recordDescriptor, data, Updatedrid);
+		void *pointerRecord = malloc(12);
+		recordForwarder = RecordForwarder::parse(recordDescriptor, pointerRecord, Updatedrid, true);
+		int shiftThreshold = FORWARDER_SIZE - rSize;
+		int ridSize = 3*sizeof(int);
+		int currRecOffset, currRecRize;
+
+		int FreeSpaceOffset = page.getFreeSpaceOffset();
+		int rightSideDataSize = FreeSpaceOffset - rOffset- rSize -1;
+
+		memcpy((char*)page.data + rOffset+ rSize + shiftThreshold, (char*)page.data + rOffset + rSize, rightSideDataSize);
+		memcpy((char*) page.data + rOffset, (char*) recordForwarder->data,FORWARDER_SIZE);
+		///
+
+		for (int i=0; i<pageSlots; i++){
+			page.getSlot(i, currRecOffset, currRecRize);
+			if(currRecOffset>rOffset && currRecRize>0){
+				currRecOffset = currRecOffset +threshold;
+				page.setSlot(i,currRecOffset,currRecRize);
+				}
+		}
+		page.setSlot(slotNumber, rOffset, ridSize);
+		page.setFreeSpaceOffset(page.getFreeSpaceOffset() - (threshold));
+		fileHandle.writePage(rid.pageNum, page.data);
+		free(pointerRecord);
+	}
+	return 0;
+}
+
+RC RecordBasedFileManager::shiftNUpdateRecord(Page &page, int threshold,
+		int slotNumber, int rOffset, int rSize, int pageSlots, int recordSize,
+		 RecordForwarder *recordForwarder, FileHandle &fileHandle) {
+	int totalSize = 0;
+	int currRecRize, currRecOffset;
+	for (int i=0; i<pageSlots; i++){
+			page.getSlot(i, currRecOffset, currRecRize);
+			if(currRecOffset>rOffset && currRecRize>0){
+				currRecOffset = currRecOffset +threshold;
+				page.setSlot(i,currRecOffset,currRecRize);
+			}
+		}
+
+	//shiftRecords(rOffset,rSize,page);
+	int FreeSpaceOffset = page.getFreeSpaceOffset();
+	int rightSideDataSize = FreeSpaceOffset - rOffset- rSize -1;
+	memcpy((char*)page.data + rOffset+ rSize + threshold, (char*)page.data + rOffset + rSize, rightSideDataSize);
+	memcpy((char*) page.data + rOffset, (char*) recordForwarder->data,recordSize);
+
+	page.setSlot(slotNumber, rOffset, recordSize);
+	page.setFreeSpaceOffset(page.getFreeSpaceOffset() - threshold);
+
+	return 0;
+}

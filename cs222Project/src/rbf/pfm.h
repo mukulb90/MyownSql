@@ -15,6 +15,7 @@ using namespace std;
 #include <string>
 #include <climits>
 #define PAGE_SIZE 4096
+#define FORWARDER_SIZE 12
 
 using namespace std;
 
@@ -81,6 +82,26 @@ public :
 	RC getAttributeByIndex(const int &index, const vector<Attribute> &recordDescriptor, void* attribute);
 
 };
+
+class RecordForwarder {
+
+private:
+
+public :
+	void* data;
+	int pageNum;
+	int slotNum;
+	bool isForwarderFlag = false;
+	RecordForwarder(RID rid);
+	RecordForwarder ();
+//	RecordForwarder (RID rid,bool isForwarderFlag);
+	int getInternalRecordBytes(const vector<Attribute> &recordDescriptor,const void* data, bool isForwardFlag);
+	static RecordForwarder*  parse(const vector<Attribute> &recordDescriptor,const void* data, RID rid,bool isForwarderFlag);
+	RC unparse(const vector<Attribute> &recordDescriptor, void* data);
+	void setForwarderValues(int &forwarder,int &pageNum, int &slotNum, RID rid);
+	void getForwarderValues(int &forwarder,int &pageNum, int &slotNum);
+};
+
 
 class Page: public Serializable {
 public:

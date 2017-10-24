@@ -97,7 +97,7 @@ RC FileHandle::internalReadPage(PageNum pageNum, void *data, bool shouldAffectCo
 	if(pageNum >= this->file->numberOfPages) {
 		return -1;
 	}
-		Page * page = this->file->pages[pageNum];
+		Page * page = this->file->getPageByIndex(pageNum);
 		memcpy(data, page->data, PAGE_SIZE);
 
 		if(shouldAffectCounters) {
@@ -115,7 +115,7 @@ RC FileHandle::writePage(PageNum pageNum, const void *data) {
 		return -1;
 	}
 
-	Page * page = this->file->pages[pageNum];
+	Page * page = this->file->getPageByIndex(pageNum);
 //	this->file->serialize(this->file->name);
 	memcpy(page->data, data, PAGE_SIZE);
 	page->serializeToOffset(this->file->name, this->file->getPageStartOffsetByIndex(pageNum), PAGE_SIZE);
@@ -354,19 +354,40 @@ int Page::getAvailableSpace() {
 
 RC Page::insertRecord(const vector<Attribute> &recordDescriptor,
 		const void *data, RID &rid) {
-//	record size + space for slots
-	int recordSize = InternalRecord::getInternalRecordBytes(recordDescriptor, data);
-//	int recordSize = this->getRecordSize(recordDescriptor, data);
-	InternalRecord* internalRecord = InternalRecord::parse(recordDescriptor, data);
-	int spaceRequired = recordSize + 2 * sizeof(int);
+
+	RecordForwarder* recordForwarder = RecordForwarder::parse(recordDescriptor, data, rid, false);
+	int recordSize = recordForwarder->getInternalRecordBytes(recordDescriptor, data,false);
+	int pageSlots = this->getNumberOfSlots();
+	int RecOffset,RecRize,currentSlot,currSlot,spaceRequired;
+	bool deletedSlot = false;
+
+	for (currSlot=0; currSlot<pageSlots; currSlot++){
+		this->getSlot(currSlot, RecOffset, RecRize);
+		if(RecRize<0){
+			deletedSlot = true;
+			spaceRequired = recordSize;
+			break;
+		}
+	}
+
+	if(!deletedSlot){
+		spaceRequired = recordSize + 2 * sizeof(int);
+	}
+
 	if (this->getAvailableSpace() - spaceRequired >= 0) {
 		char* cursor = (char*) this->data;
 		int offset  = this->getFreeSpaceOffset();
-		memcpy(cursor + offset, internalRecord->data, recordSize);
-		this->setNumberOfSlots(this->getNumberOfSlots()+1);
-		int currentSlot = this->getNumberOfSlots() - 1;
-		this->setSlot(currentSlot, offset, recordSize);
+		memcpy(cursor + offset, recordForwarder->data, recordSize);
+		if(!deletedSlot){
+			this->setNumberOfSlots(this->getNumberOfSlots()+1);
+			currentSlot = this->getNumberOfSlots()-1;
+		}
+		else{
+			this->setNumberOfSlots(this->getNumberOfSlots());
+			currentSlot = currSlot;
+		}
 		int newOffset = offset+recordSize;
+		this->setSlot(currentSlot, offset, recordSize);
 		this->setFreeSpaceOffset(newOffset);
 		newOffset = this->getFreeSpaceOffset();
 		rid.slotNum = currentSlot;
@@ -375,6 +396,7 @@ RC Page::insertRecord(const vector<Attribute> &recordDescriptor,
 		return -1;
 	}
 }
+
 
 RC Page::setSlot(int &index, int &slot_offset, int &size) {
 	char * cursor = (char *) this->data;
@@ -598,10 +620,12 @@ InternalRecord* InternalRecord::parse(const vector<Attribute> &recordDescriptor,
 	char * startInternalCursor = (char *)internalData;
 	char * internalCursor = (char *)internalData;
 
+
 	int numberOfNullBytes = getNumberOfNullBytes(recordDescriptor);
 	memcpy(internalData, cursor, numberOfNullBytes);
 	internalCursor += numberOfNullBytes;
 	cursor += numberOfNullBytes;
+
 
 //	Data start from here
 	int numberOfAttributes = recordDescriptor.size();
@@ -691,3 +715,94 @@ RC InternalRecord::getAttributeByIndex(const int &index, const vector<Attribute>
 	memcpy(attribute, startCursor + offsetFromStart, numberOfBytes);
 	return 0;
 }
+
+RecordForwarder::RecordForwarder(RID rid) {
+	this->pageNum = rid.pageNum;
+	this->slotNum = rid.slotNum;
+	this->data = 0;
+	//
+}
+
+//RecordForwarder::RecordForwarder(RID rid, bool isForwarderFlag) {
+//	this->pageNum = rid.pageNum;
+//	this->slotNum = rid.slotNum;
+//	this->data = 0;
+//	this->isForwarderFlag = true;
+//	//
+//}
+
+RecordForwarder::RecordForwarder(){
+	this->pageNum =-1;
+	this->slotNum = -1;
+	this->data = 0;
+}
+
+int RecordForwarder::getInternalRecordBytes(const vector<Attribute> &recordDescriptor,const void * data,bool isForwarderFlag) {
+	int bytes = 0;
+	bytes += FORWARDER_SIZE;
+	if(!isForwarderFlag)
+		bytes +=  InternalRecord::getInternalRecordBytes(recordDescriptor,data);
+	return bytes;
+}
+
+RecordForwarder* RecordForwarder::parse(const vector<Attribute> &recordDescriptor, const void* data, RID rid,bool isForwarderFlag) {
+	RecordForwarder *recordForwarder = new RecordForwarder(rid);
+	int internalDataSize = recordForwarder->getInternalRecordBytes(recordDescriptor, data, isForwarderFlag);
+	void * recordForwarderData = malloc(internalDataSize);
+	recordForwarder->data = recordForwarderData;
+	if(!isForwarderFlag){
+		recordForwarder->pageNum = -1;
+		recordForwarder->slotNum = -1;
+		int forwarder = 0; // Data
+		recordForwarder->setForwarderValues(forwarder, recordForwarder->pageNum,recordForwarder->slotNum, rid);
+		InternalRecord *internalRecord = InternalRecord::parse(recordDescriptor,data);
+		memcpy(((char*) recordForwarder->data) + FORWARDER_SIZE,internalRecord->data, internalDataSize - FORWARDER_SIZE);
+	}
+	else{
+		int forwarder = 1;
+		recordForwarder->setForwarderValues(forwarder, recordForwarder->pageNum,recordForwarder->slotNum, rid);
+	}
+	return recordForwarder;
+}
+
+RC RecordForwarder::unparse(const vector<Attribute> &recordDescriptor,void* data) {
+	int forwarder = 0;
+	int pageNum, slotNum;
+	this->getForwarderValues(forwarder, pageNum, slotNum);
+	if (forwarder == 0) {
+		InternalRecord *internalRecord = new InternalRecord();
+		internalRecord->data = ((char*)this->data)+FORWARDER_SIZE;
+		internalRecord->unParse(recordDescriptor,data);
+	}
+	else {
+		this->pageNum = pageNum;
+		this->slotNum = slotNum;
+	}
+	return 0;
+}
+
+void RecordForwarder::setForwarderValues(int &forwarder, int &pageNum, int &slotNum, RID rid){
+	char * cursor = (char * ) this->data;
+
+	memcpy(cursor, &forwarder, sizeof(int));
+	cursor += sizeof(int);
+
+	memcpy(cursor, &pageNum, sizeof(int));
+	cursor += sizeof(int);
+
+	memcpy(cursor, &slotNum, sizeof(int));
+}
+
+void RecordForwarder::getForwarderValues(int &forwarder,int &pageNum, int &slotNum){
+	char * cursor = (char * ) this->data;
+
+	memcpy(&forwarder, cursor, sizeof(int));
+
+	cursor += sizeof(int);
+
+	memcpy( &pageNum, cursor, sizeof(int));
+	cursor += sizeof(int);
+
+	memcpy(&slotNum, cursor, sizeof(int));
+}
+
