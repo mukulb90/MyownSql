@@ -368,7 +368,12 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
 
 RC RelationManager::insertTuple(const string &tableName, const void *data, RID &rid)
 {
-    return -1;
+	vector<Attribute> attributes;
+	FileHandle fileHandle;
+	this->getAttributes(tableName, attributes);
+	RecordBasedFileManager *rbfm = RecordBasedFileManager::instance();
+	rbfm->openFile(tableName, fileHandle);
+	return rbfm->insertRecord(fileHandle, attributes, data, rid);
 }
 
 RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
@@ -383,12 +388,18 @@ RC RelationManager::updateTuple(const string &tableName, const void *data, const
 
 RC RelationManager::readTuple(const string &tableName, const RID &rid, void *data)
 {
-    return -1;
+    vector<Attribute> attrs;
+    FileHandle fileHandle;
+    this->getAttributes(tableName, attrs);
+    RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
+    rbfm->openFile(tableName, fileHandle);
+    return rbfm->readRecord(fileHandle, attrs, rid, data);
 }
 
 RC RelationManager::printTuple(const vector<Attribute> &attrs, const void *data)
 {
-	return -1;
+    RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
+    return rbfm->printRecord(attrs, data);
 }
 
 RC RelationManager::readAttribute(const string &tableName, const RID &rid, const string &attributeName, void *data)
