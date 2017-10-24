@@ -90,10 +90,12 @@ int RBFTest_10(RecordBasedFileManager *rbfm) {
 
 
     vector<string> projectedAttributes;
+    vector<Attribute> newAttrs;
 
-    for(int i=0; i< recordDescriptor.size(); i++) {
+    for(int i=1; i< 5; i++) {
     	Attribute attr = recordDescriptor[i];
     	projectedAttributes.push_back(attr.name);
+    	newAttrs.push_back(attr);
     }
 
     Attribute compareAttribute = recordDescriptor[1];
@@ -106,6 +108,7 @@ int RBFTest_10(RecordBasedFileManager *rbfm) {
     RID rid;
     int count = 0;
     while(iterator->getNextRecord(rid, returnedData) != -1) {
+    	rbfm->printRecord(newAttrs, returnedData);
         count++;
     }
     
