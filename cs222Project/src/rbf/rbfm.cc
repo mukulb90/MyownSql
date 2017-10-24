@@ -209,6 +209,10 @@ int compare(const void* to, const void* from, const Attribute &attr) {
 
 
 RBFM_ScanIterator::RBFM_ScanIterator(){
+	this->value = 0;
+}
+
+RBFM_ScanIterator::~RBFM_ScanIterator() {
 
 }
 

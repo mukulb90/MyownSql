@@ -77,11 +77,8 @@ protected:
 
 class TableCatalogRecord {
 
-private:
-	TableCatalogRecord(void *);
-
-
 public:
+	TableCatalogRecord(void *);
 	~TableCatalogRecord();
 
 	void* data;
@@ -93,10 +90,8 @@ public:
 
 class ColumnsCatalogRecord {
 
-private:
-	ColumnsCatalogRecord(void *);
-
 public:
+	ColumnsCatalogRecord(void *);
 	~ColumnsCatalogRecord();
 
 	void* data;
