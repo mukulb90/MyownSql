@@ -4,6 +4,7 @@
 #include <string.h>
 #include <map>
 #include <algorithm>
+#include <bitset>
 
 
 #include "rbfm.h"
