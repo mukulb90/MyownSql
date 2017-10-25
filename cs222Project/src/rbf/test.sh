@@ -10,6 +10,9 @@ make
 ./rbftest8
 ./rbftest8b
 ./rbftest9
+./rbftest10b
+./rbftest10c
+./rbftest10d
 ./rbftest10
 ./rbftest11
 ./rbftest12

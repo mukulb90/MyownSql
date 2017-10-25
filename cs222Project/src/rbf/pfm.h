@@ -7,6 +7,7 @@
 #include <vector>
 #include <sstream>
 #include <iostream>
+#include <math.h>
 
 #define FILE_HANDLE_SERIALIZATION_LOCATION  "access_stats.data";
 
@@ -79,7 +80,7 @@ public :
 	static InternalRecord* parse(const vector<Attribute> &recordDescriptor,const void* data);
 	RC unParse(const vector<Attribute> &recordDescriptor, void* data);
 	RC getBytes();
-	RC getAttributeByIndex(const int &index, const vector<Attribute> &recordDescriptor, void* attribute);
+	RC getAttributeByIndex(const int &index, const vector<Attribute> &recordDescriptor, void* attribute, bool &isNull);
 
 };
 
@@ -100,6 +101,8 @@ public :
 	RC unparse(const vector<Attribute> &recordDescriptor, void* data);
 	void setForwarderValues(int &forwarder,int &pageNum, int &slotNum, RID rid);
 	void getForwarderValues(int &forwarder,int &pageNum, int &slotNum);
+	InternalRecord* getInternalRecData();
+	bool isDataForwarder(int &pageNum, int &slotNum);
 };
 
 
@@ -203,5 +206,19 @@ private:
 bool fileExists(string fileName);
 
 unsigned long fsize(char * fileName);
+
+int getNumberOfNullBytes(const vector<Attribute> &recordDescriptor);
+bool* getNullBits(const vector<Attribute> &recordDescriptor, const void* data);
+
+class VarcharParser {
+private:
+	VarcharParser();
+public:
+	void* data;
+	~VarcharParser();
+
+	static VarcharParser* parse(const string &str);
+	RC unParse(string &str);
+};
 
 #endif
