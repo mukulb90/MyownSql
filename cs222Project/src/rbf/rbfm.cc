@@ -2,6 +2,10 @@
 #include <thread>
 #include <vector>
 #include <string.h>
+#include <map>
+#include <algorithm>
+#include <bitset>
+
 
 #include "rbfm.h"
 #include "math.h"
@@ -140,9 +144,259 @@ RC RecordBasedFileManager::printRecord(const vector<Attribute> &recordDescriptor
 }
 
 RC RecordBasedFileManager::readAttribute(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, const string &attributeName, void *data) {
-	if(!fileHandle.file) {
+	vector<string> attributeNames;
+	attributeNames.push_back(attributeName);
+	return this->readAttributes(fileHandle, recordDescriptor, rid, attributeNames, data);
+}
+
+// Scan returns an iterator to allow the caller to go through the results one by one.
+RC RecordBasedFileManager::scan(FileHandle &fileHandle,
+		const vector<Attribute> &recordDescriptor,
+		const string &conditionAttribute, const CompOp compOp, // comparision type such as "<" and "="
+		const void *value,                    // used in the comparison
+		const vector<string> &attributeNames, // a list of projected attributes
+		RBFM_ScanIterator &rbfm_ScanIterator) {
+	if (!fileHandle.file) {
 		return -1;
 	}
+	rbfm_ScanIterator.fileHandle = fileHandle;
+	rbfm_ScanIterator.attributeNames = attributeNames;
+	rbfm_ScanIterator.compOp = compOp;
+	rbfm_ScanIterator.recordDescriptor = recordDescriptor;
+	rbfm_ScanIterator.value = value;
+	for (int i = 0; i < recordDescriptor.size(); ++i) {
+		Attribute attr = recordDescriptor[i];
+		if (attr.name == conditionAttribute) {
+			rbfm_ScanIterator.conditionAttribute = attr;
+			break;
+		}
+	}
+	rbfm_ScanIterator.slotNumber = -1;
+	rbfm_ScanIterator.pageNumber = -1;
+	return 0;
+}
+
+
+int compare(const void* to, const void* from, const Attribute &attr) {
+	char * fromCursor = (char*) from;
+	char * toCursor = (char*) to;
+	unsigned char toNullByte = *toCursor;
+	unsigned char fromNullByte = *fromCursor;
+//	if(toNullByte == 128 && fromNullByte == 128){
+//		return 0;
+//	}
+//	fromCursor +=1;
+	toCursor +=1;
+
+	if (attr.type == TypeInt) {
+		int fromValue = *((int*) fromCursor);
+		int toValue = *((int*) toCursor);
+		return fromValue - toValue;
+	} else if (attr.type == TypeReal) {
+		float fromValue = *((float*) fromCursor);
+		float toValue = *((float*) toCursor);
+		return fromValue - toValue;
+	} else {
+//		int fromLength = *((int*)fromCursor);
+		int toLength = *((int*)toCursor);
+//		fromCursor += sizeof(int);
+		toCursor += sizeof(int);
+		string fromString = string(fromCursor);
+		string toString = string(toCursor, toLength);
+		return fromString.compare(toString);
+	}
+}
+
+
+RBFM_ScanIterator::RBFM_ScanIterator(){
+	this->value = 0;
+}
+
+RBFM_ScanIterator::~RBFM_ScanIterator() {
+
+}
+
+RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
+	RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
+	RID rid;
+	void * compAttrValue = malloc(this->conditionAttribute.length);
+	if (this->pageNumber == -1 || this->slotNumber == -1) {
+//		first call
+		this->pageNumber = 0;
+		Page* page = fileHandle.file->getPageByIndex(this->pageNumber);
+		int numberOfSlots = page->getNumberOfSlots();
+		if (numberOfSlots >= 0) {
+			this->slotNumber = 0;
+		} else {
+			return -1;
+		}
+	} else {
+		Page* page = fileHandle.file->getPageByIndex(this->pageNumber);
+		int numberOfSlots = page->getNumberOfSlots();
+		if(this->slotNumber+1 < numberOfSlots) {
+			this->slotNumber++;
+		} else {
+			this->pageNumber++;
+			Page* page = fileHandle.file->getPageByIndex(this->pageNumber);
+			if(page == 0) {
+				return RBFM_EOF;
+			}
+			this->slotNumber=0;
+		}
+	}
+
+	rid.pageNum = this->pageNumber;
+	rid.slotNum = this->slotNumber;
+
+	rbfm->readAttribute(fileHandle, recordDescriptor, rid,
+						this->conditionAttribute.name, compAttrValue);
+				switch (this->compOp) {
+				case EQ_OP: {
+					if (compare(compAttrValue, this->value,
+							this->conditionAttribute) == 0) {
+						rbfm->readAttributes(this->fileHandle,
+								this->recordDescriptor, rid, this->attributeNames,
+								data);
+						returnedRid.pageNum = rid.pageNum;
+						returnedRid.slotNum = rid.slotNum;
+						return 0;
+					}
+					break;
+				}
+				case LE_OP: {
+					if (compare(compAttrValue, this->value,
+							this->conditionAttribute) >= 0) {
+						rbfm->readAttributes(this->fileHandle,
+								this->recordDescriptor, rid, this->attributeNames,
+								data);
+						returnedRid.pageNum = rid.pageNum;
+						returnedRid.slotNum = rid.slotNum;
+						return 0;
+					}
+					break;
+				}
+				case LT_OP: {
+					if (compare(compAttrValue, this->value,
+							this->conditionAttribute) > 0) {
+						rbfm->readAttributes(this->fileHandle,
+								this->recordDescriptor, rid, this->attributeNames,
+								data);
+						returnedRid.pageNum = rid.pageNum;
+						returnedRid.slotNum = rid.slotNum;
+						return 0;
+					}
+					break;
+				}
+				case GT_OP: {
+					if (compare(compAttrValue, this->value,
+							this->conditionAttribute) < 0) {
+						rbfm->readAttributes(this->fileHandle,
+								this->recordDescriptor, rid, this->attributeNames,
+								data);
+						returnedRid.pageNum = rid.pageNum;
+						returnedRid.slotNum = rid.slotNum;
+						return 0;
+					}
+					break;
+				}
+				case GE_OP: {
+					if (compare(compAttrValue, this->value,
+							this->conditionAttribute) <= 0) {
+						rbfm->readAttributes(this->fileHandle,
+								this->recordDescriptor, rid, this->attributeNames,
+								data);
+						returnedRid.pageNum = rid.pageNum;
+						returnedRid.slotNum = rid.slotNum;
+						return 0;
+					}
+					break;
+				}
+				case NE_OP: {
+					if (compare(compAttrValue, this->value,
+							this->conditionAttribute) != 0) {
+						rbfm->readAttributes(this->fileHandle,
+								this->recordDescriptor, rid, this->attributeNames,
+								data);
+						returnedRid.pageNum = rid.pageNum;
+						returnedRid.slotNum = rid.slotNum;
+						return 0;
+					}
+					break;
+				}
+				case NO_OP: {
+					rbfm->readAttributes(this->fileHandle, this->recordDescriptor,
+							rid, this->attributeNames, data);
+					returnedRid.pageNum = rid.pageNum;
+					returnedRid.slotNum = rid.slotNum;
+					return 0;
+				}
+			}
+	return this->getNextRecord(returnedRid, data);
+}
+
+map<string, Attribute> getAttributeNameToAttributeMap(const vector<Attribute> &attrs){
+	map<string, Attribute> attrsMap;
+	for (int i = 0; i < attrs.size(); ++i) {
+		Attribute attribute = attrs[i];
+		attrsMap[attribute.name] = attribute;
+	}
+	return attrsMap;
+}
+
+void mergeAttributesData(vector<Attribute> recordDescriptor, vector<string> attributeNames,
+	vector<bool> isNullArray, vector<void*> dataArray, void* data){
+	char * cursor = (char*) data;
+	char * startCursor = (char*) data;
+	map<string, Attribute> recordDescriptorMap = getAttributeNameToAttributeMap(recordDescriptor);
+	vector<Attribute> newRecordDescriptor;
+	for (int i = 0; i < attributeNames.size(); ++i) {
+		Attribute attr = recordDescriptorMap[attributeNames[i]];
+		newRecordDescriptor.push_back(attr);
+	}
+
+	int numberOfNullBytes = getNumberOfNullBytes(newRecordDescriptor);
+	cursor += numberOfNullBytes;
+	bitset<8> byte;
+	for (int i = 0; i < newRecordDescriptor.size(); ++i) {
+			Attribute attr = newRecordDescriptor[i];
+			bool isNull = isNullArray[i];
+			void * attrData = dataArray[i];
+			int bitIndex = 7-(i%8);
+			if(isNull) {
+				byte.set(bitIndex, 1);
+			} else {
+				byte.set(bitIndex, 0);
+			}
+			if(attr.type == TypeInt || attr.type == TypeReal) {
+				memcpy(cursor, attrData, sizeof(int));
+				cursor += sizeof(int);
+			} else {
+				int length = *((int*)attrData);
+				int attrSize = sizeof(int) + sizeof(char)*length;
+				memcpy(cursor, attrData, attrSize);
+				cursor += attrSize;
+			}
+
+			if(bitIndex == 0 || i == newRecordDescriptor.size() -1) {
+				int byteOffset = i/8;
+				unsigned char nullbyte = byte.to_ulong();
+				memcpy(startCursor + byteOffset, &nullbyte, 1);
+			}
+		}
+
+}
+
+RC RecordBasedFileManager::readAttributes(FileHandle &fileHandle,
+		const vector<Attribute> &recordDescriptor, const RID &rid,
+		const vector<string> &attributeNames, void *data){
+	map<string, Attribute> recordDescriptorMap = getAttributeNameToAttributeMap(recordDescriptor);
+	if(!fileHandle.file) {
+			return -1;
+	}
+
+	vector<bool> isNullArray;
+	vector<void*> dataArray;
+
 	Page * page = fileHandle.file->pages[rid.pageNum];
 	int slotOffset, size;
 	int slotNum = rid.slotNum;
@@ -151,14 +405,35 @@ RC RecordBasedFileManager::readAttribute(FileHandle &fileHandle, const vector<At
 	memcpy(record, (char *)page->data + slotOffset, size);
 	InternalRecord* ir = new InternalRecord();
 	ir->data = record;
-	int index = -1;
-	for(int i = 0; i< recordDescriptor.size(); i++) {
-		Attribute at = recordDescriptor[i];
-		if(at.name == attributeName) {
-			index = i;
+
+	for (int i = 0; i < attributeNames.size(); ++i) {
+		string attributeName = attributeNames[i];
+		Attribute attr = recordDescriptorMap[attributeName];
+		void * attribute;
+		if(attr.type == TypeInt || attr.type == TypeReal) {
+			attribute = malloc(sizeof(int));
+		} else {
+			attribute = malloc(PAGE_SIZE);
 		}
+		int index = -1;
+		for(int i = 0; i< recordDescriptor.size(); i++) {
+			Attribute at = recordDescriptor[i];
+			if(at.name == attributeName) {
+				index = i;
+			}
+		}
+		bool isNull;
+		ir->getAttributeByIndex(index, recordDescriptor, attribute, isNull);
+		isNullArray.push_back(isNull);
+		dataArray.push_back(attribute);
 	}
-	ir->getAttributeByIndex(index, recordDescriptor, data);
+
+	mergeAttributesData(recordDescriptor, attributeNames, isNullArray, dataArray, data);
+
+	for (int i = 0; i < attributeNames.size(); ++i) {
+		free(dataArray[i]);
+	}
 	return 0;
 }
+
 

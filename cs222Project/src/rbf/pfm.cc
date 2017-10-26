@@ -311,7 +311,6 @@ void Page::setFreeSpaceOffset(int value) {
 	char * cursor = (char*) this->data;
 	int offset = this->getFreeSpaceOffSetPointer();
 	cursor += offset;
-	int * valu = (int *)cursor;
 	memcpy(cursor, &value, sizeof(int));
 }
 
@@ -447,6 +446,7 @@ Page::~Page() {
 PagedFile::PagedFile(string fileName) {
 	this->name = fileName;
 	this->numberOfPages = 0;
+	this->handle = 0;
 }
 
 
@@ -459,6 +459,9 @@ int PagedFile::setFileHandle(FileHandle *fileHandle) {
 }
 
 Page* PagedFile::getPageByIndex(int index) {
+	if(index >= this->pages.size()) {
+		return 0;
+	}
 	this->handle->readPageCounter++;
 	string path = FILE_HANDLE_SERIALIZATION_LOCATION;
 	this->handle->serialize(path);
@@ -536,10 +539,6 @@ int PagedFile::getPageMetaDataSize(){
 }
 
 
-InternalRecord::InternalRecord(){
-	this->data = 0;
-}
-
 int getNumberOfNullBytes(const vector<Attribute> &recordDescriptor){
 	return ceil(recordDescriptor.size() / 8.0);
 }
@@ -548,7 +547,7 @@ bool* getNullBits(const vector<Attribute> &recordDescriptor, const void* data) {
 	int nullBytesSize = getNumberOfNullBytes(recordDescriptor);
 	unsigned char* nullstream  = (unsigned char*)malloc(nullBytesSize);
 		memcpy(nullstream, data, nullBytesSize);
-//# TODO
+		//# TODO
 		bool * nullarr = (bool *)malloc(recordDescriptor.size());
 
 		for(int i=0;  i<recordDescriptor.size(); i++){
@@ -557,6 +556,11 @@ bool* getNullBits(const vector<Attribute> &recordDescriptor, const void* data) {
 		}
 		free(nullstream);
 		return nullarr;
+}
+
+
+InternalRecord::InternalRecord(){
+	this->data = 0;
 }
 
 int InternalRecord::getInternalRecordBytes(const vector<Attribute> &recordDescriptor,const void* data){
@@ -680,14 +684,49 @@ RC InternalRecord::unParse(const vector<Attribute> &recordDescriptor, void* data
 	return 0;
 }
 
-RC InternalRecord::getAttributeByIndex(const int &index, const vector<Attribute> &recordDescriptor, void * attribute) {
+RC InternalRecord::getAttributeByIndex(const int &index, const vector<Attribute> &recordDescriptor, void * attribute, bool &isNull) {
+	char * attributeCursor = (char * ) attribute;
+	Attribute attr = recordDescriptor[index];
 	char * cursor = (char *)this->data;
 	char * startCursor = (char *)this->data;
 	int numberOfNullBytes = getNumberOfNullBytes(recordDescriptor);
+	bool* nullBits = getNullBits(recordDescriptor, this->data);
 	cursor += numberOfNullBytes;
 	unsigned short offsetFromStart = *(unsigned short*)(cursor + sizeof(unsigned short)*index);
 	unsigned short nextOffsetFromStart = *(unsigned short*)(cursor + sizeof(unsigned short)*(index+1));
 	unsigned short numberOfBytes = nextOffsetFromStart - offsetFromStart;
-	memcpy(attribute, startCursor + offsetFromStart, numberOfBytes);
+	if(attr.type == TypeVarChar) {
+		int length = (int)numberOfBytes;
+		memcpy(attributeCursor, &length, sizeof(int));
+		attributeCursor += sizeof(int);
+	}
+	memcpy(attributeCursor, startCursor + offsetFromStart, numberOfBytes);
+	isNull = *(nullBits+index);
 	return 0;
 }
+
+VarcharParser::VarcharParser(){
+	this->data = 0;
+}
+
+VarcharParser* VarcharParser::parse(const string &str) {
+	VarcharParser* varcharParser = new VarcharParser();
+	int length = str.size();
+	varcharParser->data = malloc(length*sizeof(char)+sizeof(int));
+	char * cursor = (char*)varcharParser->data;
+	memcpy(cursor, &length, sizeof(int));
+	cursor += sizeof(int);
+	memcpy(cursor, str.c_str(), length);
+	return varcharParser;
+}
+
+RC VarcharParser::unParse(string &str){
+	char * cursor = (char *)this->data;
+	int length;
+	memcpy(&length, cursor, sizeof(int));
+	cursor += sizeof(int);
+	str = string(cursor, length);
+	return 0;
+};
+
+

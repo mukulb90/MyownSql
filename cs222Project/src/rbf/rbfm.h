@@ -24,13 +24,22 @@ The scan iterator is NOT required to be implemented for the part 1 of the projec
 
 class RBFM_ScanIterator {
 public:
-  RBFM_ScanIterator() {};
-  ~RBFM_ScanIterator() {};
+	FileHandle fileHandle;
+	vector<Attribute> recordDescriptor;
+	Attribute conditionAttribute;
+	CompOp compOp;                  // comparision type such as "<" and "="
+	const void* value;
+	vector<string> attributeNames;
+	int pageNumber;
+	int slotNumber;
+
+  RBFM_ScanIterator();
+  ~RBFM_ScanIterator();
 
   // Never keep the results in the memory. When getNextRecord() is called, 
   // a satisfying record needs to be fetched from the file.
   // "data" follows the same format as RecordBasedFileManager::insertRecord().
-  RC getNextRecord(RID &rid, void *data) { return RBFM_EOF; };
+  RC getNextRecord(RID &rid, void *data);
   RC close() { return -1; };
 };
 
@@ -82,6 +91,8 @@ IMPORTANT, PLEASE READ: All methods below this comment (other than the construct
   RC updateRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, const RID &rid);
 
   RC readAttribute(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, const string &attributeName, void *data);
+
+  RC readAttributes(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, const vector<string> &attributeName, void *data);
 
   // Scan returns an iterator to allow the caller to go through the results one by one. 
   RC scan(FileHandle &fileHandle,
