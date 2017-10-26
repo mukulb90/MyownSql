@@ -246,8 +246,6 @@ RC RelationManager::createCatalog()
 
 	// Inserting data in columnsCatalog starts
 
-	vector<vector<string>> records;
-	vector<string> columnsRecord;
 	rbfm->openFile(COLUMNS_CATALOG_NAME, fileHandle);
 
 	ColumnsCatalogRecord* columnsCatalogRecord;
@@ -307,7 +305,7 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
 
 RC RelationManager::deleteTable(const string &tableName)
 {
-    return -1;
+	return -1;
 }
 
 RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &attrs)
@@ -377,12 +375,24 @@ RC RelationManager::insertTuple(const string &tableName, const void *data, RID &
 
 RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
 {
-    return -1;
+	cout << "Inside delete tuple";
+	RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
+	FileHandle fileHandle;
+	rbfm->openFile(tableName, fileHandle);
+	vector<Attribute> recordDescriptor;
+	this->getAttributes(tableName, recordDescriptor);
+	cout << "Above delete";
+	return rbfm->deleteRecord(fileHandle, recordDescriptor, rid);
 }
 
 RC RelationManager::updateTuple(const string &tableName, const void *data, const RID &rid)
 {
-    return -1;
+    RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
+    FileHandle fileHandle;
+    rbfm->openFile(tableName, fileHandle);
+    vector<Attribute> recordDescriptor;
+    this->getAttributes(tableName, recordDescriptor);
+    return rbfm->updateRecord(fileHandle, recordDescriptor, data, rid);
 }
 
 RC RelationManager::readTuple(const string &tableName, const RID &rid, void *data)
