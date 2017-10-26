@@ -350,12 +350,11 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
 	}
 
 	int tableIdInt = stoi(tableId);
-	cout << tableIdInt <<endl;
 	rbfm->scan(fileHandle, columnsCatalogAttrs, tableIdAttr.name, EQ_OP, &tableIdInt  , colmnsCatalogAttrsNames, *iterator);
 	void* columnsCatalogRecord = malloc(2000);
 	while(iterator->getNextRecord(rid, columnsCatalogRecord) != -1) {
 		ColumnsCatalogRecord* ccr = new ColumnsCatalogRecord(columnsCatalogRecord);
-		rbfm->printRecord(columnsCatalogAttrs, columnsCatalogRecord);
+//		rbfm->printRecord(columnsCatalogAttrs, columnsCatalogRecord);
 		int readTableId;
 		Attribute readAttribute;
 		int columnIndex;
@@ -404,7 +403,12 @@ RC RelationManager::printTuple(const vector<Attribute> &attrs, const void *data)
 
 RC RelationManager::readAttribute(const string &tableName, const RID &rid, const string &attributeName, void *data)
 {
-    return -1;
+    RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
+    FileHandle fileHandle;
+    vector<Attribute> attrs;
+    rbfm->openFile(tableName, fileHandle);
+    this->getAttributes(tableName, attrs);
+    return rbfm->readAttribute(fileHandle, attrs, rid, attributeName, data);
 }
 
 RC RelationManager::scan(const string &tableName,
@@ -414,7 +418,23 @@ RC RelationManager::scan(const string &tableName,
       const vector<string> &attributeNames,
       RM_ScanIterator &rm_ScanIterator)
 {
-    return -1;
+   RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
+   FileHandle fileHandle;
+   vector<Attribute> attrs;
+   RBFM_ScanIterator* iterator = new RBFM_ScanIterator();
+   rbfm->openFile(tableName, fileHandle);
+   this->getAttributes(tableName, attrs);
+   rm_ScanIterator.rbfmIterator = *iterator;
+   return rbfm->scan(fileHandle, attrs, conditionAttribute, compOp, value, attributeNames, *iterator);
+}
+
+
+RC RM_ScanIterator::getNextTuple(RID &rid, void *data) {
+	return this->rbfmIterator.getNextRecord(rid, data);
+}
+
+RC RM_ScanIterator::close() {
+	return this->rbfmIterator.close();
 }
 
 // Extra credit work
