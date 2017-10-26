@@ -354,7 +354,7 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
 	void* columnsCatalogRecord = malloc(2000);
 	while(iterator->getNextRecord(rid, columnsCatalogRecord) != -1) {
 		ColumnsCatalogRecord* ccr = new ColumnsCatalogRecord(columnsCatalogRecord);
-		rbfm->printRecord(columnsCatalogAttrs, columnsCatalogRecord);
+//		rbfm->printRecord(columnsCatalogAttrs, columnsCatalogRecord);
 		int readTableId;
 		Attribute readAttribute;
 		int columnIndex;
