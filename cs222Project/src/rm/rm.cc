@@ -350,7 +350,6 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
 	}
 
 	int tableIdInt = stoi(tableId);
-	cout << tableIdInt <<endl;
 	rbfm->scan(fileHandle, columnsCatalogAttrs, tableIdAttr.name, EQ_OP, &tableIdInt  , colmnsCatalogAttrsNames, *iterator);
 	void* columnsCatalogRecord = malloc(2000);
 	while(iterator->getNextRecord(rid, columnsCatalogRecord) != -1) {
