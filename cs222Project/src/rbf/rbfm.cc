@@ -222,12 +222,19 @@ int compare(const void* to, const void* from, const Attribute &attr) {
 
 
 RBFM_ScanIterator::RBFM_ScanIterator(){
+	this->value = 0;
+}
+
+RBFM_ScanIterator::~RBFM_ScanIterator() {
 
 }
 
 RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 	RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
 	RID rid;
+	if (!fileHandle.file) {
+		return -1;
+	}
 	void * compAttrValue = malloc(this->conditionAttribute.length);
 	if (this->pageNumber == -1 || this->slotNumber == -1) {
 //		first call

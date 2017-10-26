@@ -14,12 +14,14 @@ using namespace std;
 // RM_ScanIterator is an iteratr to go through tuples
 class RM_ScanIterator {
 public:
+
+	RBFM_ScanIterator rbfmIterator;
   RM_ScanIterator() {};
   ~RM_ScanIterator() {};
 
   // "data" follows the same format as RelationManager::insertTuple()
-  RC getNextTuple(RID &rid, void *data) { return RM_EOF; };
-  RC close() { return -1; };
+  RC getNextTuple(RID &rid, void *data);
+  RC close();
 };
 
 
@@ -77,11 +79,8 @@ protected:
 
 class TableCatalogRecord {
 
-private:
-	TableCatalogRecord(void *);
-
-
 public:
+	TableCatalogRecord(void *);
 	~TableCatalogRecord();
 
 	void* data;
@@ -93,10 +92,8 @@ public:
 
 class ColumnsCatalogRecord {
 
-private:
-	ColumnsCatalogRecord(void *);
-
 public:
+	ColumnsCatalogRecord(void *);
 	~ColumnsCatalogRecord();
 
 	void* data;
