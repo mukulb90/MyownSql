@@ -518,7 +518,7 @@ RC RecordBasedFileManager::updateSlotDir(int &currRecordOffset, int &currRecordS
 RC RecordBasedFileManager::shiftRecords(int &currRecordOffset, int &currRecordSize, Page &page){
 
 	int FreeSpaceOffset = page.getFreeSpaceOffset();
-	int rightSideDataSize = FreeSpaceOffset - currRecordOffset- currRecordSize -1;
+	int rightSideDataSize = FreeSpaceOffset - currRecordOffset- currRecordSize;
 	memcpy((char*)page.data + currRecordOffset, (char*)page.data + currRecordOffset + currRecordSize, rightSideDataSize);
 	return 0;
 }
@@ -568,7 +568,7 @@ RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle,
 		int currRecOffset, currRecRize;
 
 		int FreeSpaceOffset = page.getFreeSpaceOffset();
-		int rightSideDataSize = FreeSpaceOffset - rOffset- rSize -1;
+		int rightSideDataSize = FreeSpaceOffset - rOffset- rSize;
 
 		memcpy((char*)page.data + rOffset+ rSize + shiftThreshold, (char*)page.data + rOffset + rSize, rightSideDataSize);
 		memcpy((char*) page.data + rOffset, (char*) recordForwarder->data,FORWARDER_SIZE);
@@ -604,7 +604,7 @@ RC RecordBasedFileManager::shiftNUpdateRecord(Page &page, int threshold,
 
 	//shiftRecords(rOffset,rSize,page);
 	int FreeSpaceOffset = page.getFreeSpaceOffset();
-	int rightSideDataSize = FreeSpaceOffset - rOffset- rSize -1;
+	int rightSideDataSize = FreeSpaceOffset - rOffset- rSize;
 	memcpy((char*)page.data + rOffset+ rSize + threshold, (char*)page.data + rOffset + rSize, rightSideDataSize);
 	memcpy((char*) page.data + rOffset, (char*) recordForwarder->data,recordSize);
 
