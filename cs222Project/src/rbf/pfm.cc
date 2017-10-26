@@ -484,9 +484,9 @@ Page* PagedFile::getPageByIndex(int index) {
 	if(index >= this->pages.size()) {
 		return 0;
 	}
-	this->handle->readPageCounter++;
-	string path = FILE_HANDLE_SERIALIZATION_LOCATION;
-	this->handle->serialize(path);
+	//this->handle->readPageCounter++;
+//	string path = FILE_HANDLE_SERIALIZATION_LOCATION;
+//	this->handle->serialize(path);
 	return this->pages[index];
 }
 
