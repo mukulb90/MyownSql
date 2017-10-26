@@ -97,7 +97,7 @@ RC FileHandle::internalReadPage(PageNum pageNum, void *data, bool shouldAffectCo
 	if(pageNum >= this->file->numberOfPages) {
 		return -1;
 	}
-		Page * page = this->file->getPageByIndex(pageNum);
+		Page * page = this->file->pages[pageNum];
 		memcpy(data, page->data, PAGE_SIZE);
 
 		if(shouldAffectCounters) {
@@ -115,7 +115,7 @@ RC FileHandle::writePage(PageNum pageNum, const void *data) {
 		return -1;
 	}
 
-	Page * page = this->file->getPageByIndex(pageNum);
+	Page * page = this->file->pages[pageNum];
 //	this->file->serialize(this->file->name);
 	memcpy(page->data, data, PAGE_SIZE);
 	page->serializeToOffset(this->file->name, this->file->getPageStartOffsetByIndex(pageNum), PAGE_SIZE);
@@ -484,9 +484,9 @@ Page* PagedFile::getPageByIndex(int index) {
 	if(index >= this->pages.size()) {
 		return 0;
 	}
-	//this->handle->readPageCounter++;
-//	string path = FILE_HANDLE_SERIALIZATION_LOCATION;
-//	this->handle->serialize(path);
+	this->handle->readPageCounter++;
+	string path = FILE_HANDLE_SERIALIZATION_LOCATION;
+	this->handle->serialize(path);
 	return this->pages[index];
 }
 
