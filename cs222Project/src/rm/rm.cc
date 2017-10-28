@@ -305,7 +305,79 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
 
 RC RelationManager::deleteTable(const string &tableName)
 {
-	return -1;
+	RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
+	FileHandle fileHandle;
+	rbfm->openFile(TABLE_CATALOG_NAME, fileHandle);
+	RBFM_ScanIterator * iterator = new RBFM_ScanIterator();
+
+	vector<Attribute> tableCatalogAttrs;
+	getTablesCatalogRecordDescriptor(tableCatalogAttrs);
+
+	Attribute tableNameAttr = tableCatalogAttrs[1];
+	Attribute tableIdAttr = tableCatalogAttrs[0];
+
+	vector<string> projections;
+	vector<Attribute> projectedAttribute;
+	cout << "Deleting File"<<tableName ;
+
+	rbfm->destroyFile(tableName.c_str());
+
+
+	RID rid;
+	void* tablesCatalogRecord = malloc(1000);
+	projections.push_back(tableIdAttr.name);
+	projectedAttribute.push_back(tableIdAttr);
+
+	rbfm->scan(fileHandle, tableCatalogAttrs, tableNameAttr.name, EQ_OP,
+			(void*) tableName.c_str(), projections, *iterator);
+	int rc = iterator->getNextRecord(rid, tablesCatalogRecord);
+
+	cout << "tablesCatalogRecord" << rid.slotNum << endl;
+
+	vector<string> tablesCatalogParsedRecord = getTableData(projectedAttribute,
+			tablesCatalogRecord);
+	string tableId = tablesCatalogParsedRecord[0];
+
+	vector<RID> RIDVector;
+	RID ridColumn;
+	rbfm->openFile(COLUMNS_CATALOG_NAME, fileHandle);
+	RBFM_ScanIterator *iterator1 = new RBFM_ScanIterator();
+	vector<Attribute> columnsCatalogAttrs;
+	getColumnsCatalogRecordDescriptor(columnsCatalogAttrs);
+
+	vector<string> colmnsCatalogAttrsNames;
+	for (int i = 0; i < columnsCatalogAttrs.size(); ++i) {
+		Attribute attr = columnsCatalogAttrs[i];
+		colmnsCatalogAttrsNames.push_back(attr.name);
+	}
+
+	int tableIdInt = stoi(tableId);
+	rbfm->scan(fileHandle, columnsCatalogAttrs, tableIdAttr.name, EQ_OP,
+			&tableIdInt, colmnsCatalogAttrsNames, *iterator1);
+	void* columnsCatalogRecord = malloc(2000);
+
+	while (iterator1->getNextRecord(ridColumn, columnsCatalogRecord) != -1) {
+		cout << "RIDS "<< ridColumn.slotNum << endl;
+		RIDVector.push_back(ridColumn);
+	}
+
+	for (int i = 0; i < RIDVector.size(); i++) {
+		cout << "RIDS pageNum:: " << RIDVector.at(i).pageNum << endl;
+		cout << "RIDS slotNum:: " << RIDVector.at(i).slotNum << endl;
+		ridColumn = RIDVector.at(i);
+		cout << "Deleting from columns table"<<endl;
+		this->deleteTuple(COLUMNS_CATALOG_NAME, ridColumn);
+
+	}
+
+	// Drop table
+	cout <<"deleting from tables table"<<endl;
+	cout << "Table id :: " << tableId << endl;
+
+	this->deleteTuple(TABLE_CATALOG_NAME,rid);
+
+
+	return 0;
 }
 
 RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &attrs)
@@ -375,13 +447,11 @@ RC RelationManager::insertTuple(const string &tableName, const void *data, RID &
 
 RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
 {
-	cout << "Inside delete tuple";
 	RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
 	FileHandle fileHandle;
 	rbfm->openFile(tableName, fileHandle);
 	vector<Attribute> recordDescriptor;
 	this->getAttributes(tableName, recordDescriptor);
-	cout << "Above delete";
 	return rbfm->deleteRecord(fileHandle, recordDescriptor, rid);
 }
 
