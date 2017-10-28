@@ -13,7 +13,7 @@
 
 using namespace std;
 
-#include <string>
+#include <string.h>
 #include <climits>
 #define PAGE_SIZE 4096
 #define FORWARDER_SIZE 12
