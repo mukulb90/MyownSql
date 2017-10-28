@@ -528,6 +528,7 @@ RC RecordBasedFileManager::internalReadAttributes(FileHandle &fileHandle, const 
 
 RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle,
 		const vector<Attribute> &recordDescriptor, const RID &rid) {
+	int rc;
 	if (!fileHandle.file) {
 		return -1;
 	}
@@ -538,7 +539,10 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle,
 	int delRecOffset, delRecSize;
 	int slotNumber = rid.slotNum;
 	int pageSlots = page.getNumberOfSlots();
-	page.getSlot(slotNumber, delRecOffset, delRecSize);
+	rc = page.getSlot(slotNumber, delRecOffset, delRecSize);
+	if(rc == -1) {
+		return rc;
+	}
 	shiftRecords(delRecOffset,delRecSize, page);
 	updateSlotDir(delRecOffset, delRecSize, page,  pageSlots);
 
