@@ -39,7 +39,11 @@ public:
 
   RC deleteTable(const string &tableName);
 
+  RC getTableDetailsByName(const string &tableName, int &tableId, int &versionId);
+
   RC getAttributes(const string &tableName, vector<Attribute> &attrs);
+
+  RC getAttributesVector(const string &tableName, vector<vector<Attribute>> &recordDescriptors);
 
   RC insertTuple(const string &tableName, const void *data, RID &rid);
 
@@ -85,7 +89,7 @@ public:
 
 	void* data;
 
-	static TableCatalogRecord* parse(const int &id, const string &tableName);
+	static TableCatalogRecord* parse(const int &id, const string &tableName, const int &version);
 	RC unParse(int &id, string &tableName);
 };
 
@@ -98,8 +102,8 @@ public:
 
 	void* data;
 
-	static ColumnsCatalogRecord* parse(const int &tableId, const Attribute &attrs, const int &columnIndex);
-	RC unParse(int &tableId, Attribute &attrs, int &columnIndex);
+	static ColumnsCatalogRecord* parse(const int &tableId, const Attribute &attrs, const int &columnIndex, const int &version);
+	RC unParse(int &tableId, Attribute &attrs, int &columnIndex, int &version);
 };
 
 #endif

@@ -77,10 +77,12 @@ public :
 
 	InternalRecord();
 	static int getInternalRecordBytes(const vector<Attribute> &recordDescriptor, const void* data);
-	static InternalRecord* parse(const vector<Attribute> &recordDescriptor,const void* data);
-	RC unParse(const vector<Attribute> &recordDescriptor, void* data);
+	static InternalRecord* parse(const vector<Attribute> &recordDescriptor,const void* data, const int &versionId);
+	RC unParse(const vector<Attribute> &recordDescriptor, void* data, int &versionId);
 	RC getBytes();
 	RC getAttributeByIndex(const int &index, const vector<Attribute> &recordDescriptor, void* attribute, bool &isNull);
+	RC getVersionId(int &versionId);
+
 
 };
 
@@ -97,8 +99,8 @@ public :
 	RecordForwarder ();
 //	RecordForwarder (RID rid,bool isForwarderFlag);
 	int getInternalRecordBytes(const vector<Attribute> &recordDescriptor,const void* data, bool isForwardFlag);
-	static RecordForwarder*  parse(const vector<Attribute> &recordDescriptor,const void* data, RID rid,bool isForwarderFlag);
-	RC unparse(const vector<Attribute> &recordDescriptor, void* data);
+	static RecordForwarder*  parse(const vector<Attribute> &recordDescriptor,const void* data, RID rid,bool isForwarderFlag, const int &versionId);
+	RC unparse(const vector<Attribute> &recordDescriptor, void* data, int &versionId);
 	void setForwarderValues(int &forwarder,int &pageNum, int &slotNum, RID rid);
 	void getForwarderValues(int &forwarder,int &pageNum, int &slotNum);
 	InternalRecord* getInternalRecData();
@@ -124,7 +126,7 @@ public:
 	void setNumberOfSlots(int);
 	int getNumberOfSlotsPointer();
 	int getAvailableSpace();
-	RC insertRecord(const vector<Attribute> &recordDescriptor, const void *data, RID &rid);
+	RC insertRecord(const vector<Attribute> &recordDescriptor, const void *data, RID &rid, const int &versionId);
 	static int getRecordSize(const vector<Attribute> &recordDescriptor, const void *data);
 	RC setSlot(int &index, int &offset, int &size);
 	RC getSlot(int &index, int &offset, int &size);

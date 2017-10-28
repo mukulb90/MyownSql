@@ -352,10 +352,10 @@ int Page::getAvailableSpace() {
 }
 
 RC Page::insertRecord(const vector<Attribute> &recordDescriptor,
-		const void *data, RID &rid) {
+		const void *data, RID &rid, const int &versionId) {
 
-	RecordForwarder* recordForwarder = RecordForwarder::parse(recordDescriptor, data, rid, false);
-	int recordSize = recordForwarder->getInternalRecordBytes(recordDescriptor, data,false);
+	RecordForwarder* recordForwarder = RecordForwarder::parse(recordDescriptor, data, rid, false, versionId);
+	int recordSize = recordForwarder->getInternalRecordBytes(recordDescriptor, data, false);
 	int pageSlots = this->getNumberOfSlots();
 	int RecOffset,RecRize,currentSlot,currSlot,spaceRequired;
 	bool deletedSlot = false;
@@ -486,7 +486,7 @@ Page* PagedFile::getPageByIndex(int index) {
 	}
 	this->handle->readPageCounter++;
 	string path = FILE_HANDLE_SERIALIZATION_LOCATION;
-	this->handle->serialize(path);
+//	this->handle->serialize(path);
 	return this->pages[index];
 }
 
@@ -591,6 +591,7 @@ int InternalRecord::getInternalRecordBytes(const vector<Attribute> &recordDescri
 	bool * nullBits = getNullBits(recordDescriptor, data);
 	int numberOfNullBytes = getNumberOfNullBytes(recordDescriptor);
 
+	size += sizeof(int);
 	cursor += numberOfNullBytes;
 	size += numberOfNullBytes;
 	size += sizeof(unsigned short)*(recordDescriptor.size()+1);
@@ -616,7 +617,7 @@ int InternalRecord::getInternalRecordBytes(const vector<Attribute> &recordDescri
 	return size;
 }
 
-InternalRecord* InternalRecord::parse(const vector<Attribute> &recordDescriptor,const void* data){
+InternalRecord* InternalRecord::parse(const vector<Attribute> &recordDescriptor,const void* data, const int &versionId){
 	InternalRecord* record = new InternalRecord();
 	bool * nullBits = getNullBits(recordDescriptor, data);
 	char * cursor = (char *)data;
@@ -624,16 +625,17 @@ InternalRecord* InternalRecord::parse(const vector<Attribute> &recordDescriptor,
 	char * startInternalCursor = (char *)internalData;
 	char * internalCursor = (char *)internalData;
 
-
+	memcpy(internalCursor, &versionId, sizeof(int));
+	internalCursor += sizeof(int);
 	int numberOfNullBytes = getNumberOfNullBytes(recordDescriptor);
-	memcpy(internalData, cursor, numberOfNullBytes);
+	memcpy(internalCursor, cursor, numberOfNullBytes);
 	internalCursor += numberOfNullBytes;
 	cursor += numberOfNullBytes;
 
 
 //	Data start from here
 	int numberOfAttributes = recordDescriptor.size();
-	unsigned short insertionOffset = (unsigned short)numberOfNullBytes + (unsigned short)sizeof(unsigned short)*(numberOfAttributes+1);
+	unsigned short insertionOffset = (unsigned short)numberOfNullBytes + (unsigned short)sizeof(unsigned short)*(numberOfAttributes+1) + (unsigned short)sizeof(int);
 
 	for(int i=0; i<numberOfAttributes; i++){
 		Attribute attr = recordDescriptor[i];
@@ -664,13 +666,15 @@ InternalRecord* InternalRecord::parse(const vector<Attribute> &recordDescriptor,
 }
 
 
-RC InternalRecord::unParse(const vector<Attribute> &recordDescriptor, void* data) {
+RC InternalRecord::unParse(const vector<Attribute> &recordDescriptor, void* data, int &versionId) {
 	int numberOfNullBytes = getNumberOfNullBytes(recordDescriptor);
 	char * startInternalCursor = (char *) this->data;
 	char * internalCursor = (char*)this->data;
 	char * cursor = (char *)data;
 
 	vector<int> lengthOfAttributes;
+	 memcpy(&versionId, internalCursor, sizeof(int));
+	 internalCursor += sizeof(int);
 
 	 memcpy(cursor, internalCursor, numberOfNullBytes);
 	 bool * nullBits = getNullBits(recordDescriptor, cursor);
@@ -715,6 +719,7 @@ RC InternalRecord::getAttributeByIndex(const int &index, const vector<Attribute>
 	char * startCursor = (char *)this->data;
 	int numberOfNullBytes = getNumberOfNullBytes(recordDescriptor);
 	bool* nullBits = getNullBits(recordDescriptor, this->data);
+	cursor += sizeof(int);
 	cursor += numberOfNullBytes;
 	unsigned short offsetFromStart = *(unsigned short*)(cursor + sizeof(unsigned short)*index);
 	unsigned short nextOffsetFromStart = *(unsigned short*)(cursor + sizeof(unsigned short)*(index+1));
@@ -726,6 +731,11 @@ RC InternalRecord::getAttributeByIndex(const int &index, const vector<Attribute>
 	}
 	memcpy(attributeCursor, startCursor + offsetFromStart, numberOfBytes);
 	isNull = *(nullBits+index);
+	return 0;
+}
+
+RC InternalRecord::getVersionId(int &versionId) {
+	memcpy(&versionId, this->data, sizeof(int));
 	return 0;
 }
 
@@ -751,7 +761,7 @@ int RecordForwarder::getInternalRecordBytes(const vector<Attribute> &recordDescr
 	return bytes;
 }
 
-RecordForwarder* RecordForwarder::parse(const vector<Attribute> &recordDescriptor, const void* data, RID rid,bool isForwarderFlag) {
+RecordForwarder* RecordForwarder::parse(const vector<Attribute> &recordDescriptor, const void* data, RID rid,bool isForwarderFlag, const int &versionId) {
 	RecordForwarder *recordForwarder = new RecordForwarder(rid);
 	int internalDataSize = recordForwarder->getInternalRecordBytes(recordDescriptor, data, isForwarderFlag);
 	void * recordForwarderData = malloc(internalDataSize);
@@ -761,7 +771,7 @@ RecordForwarder* RecordForwarder::parse(const vector<Attribute> &recordDescripto
 		recordForwarder->slotNum = -1;
 		int forwarder = 0; // Data
 		recordForwarder->setForwarderValues(forwarder, recordForwarder->pageNum,recordForwarder->slotNum, rid);
-		InternalRecord *internalRecord = InternalRecord::parse(recordDescriptor,data);
+		InternalRecord *internalRecord = InternalRecord::parse(recordDescriptor, data, versionId);
 		memcpy(((char*) recordForwarder->data) + FORWARDER_SIZE,internalRecord->data, internalDataSize - FORWARDER_SIZE);
 	}
 	else{
@@ -771,14 +781,14 @@ RecordForwarder* RecordForwarder::parse(const vector<Attribute> &recordDescripto
 	return recordForwarder;
 }
 
-RC RecordForwarder::unparse(const vector<Attribute> &recordDescriptor,void* data) {
+RC RecordForwarder::unparse(const vector<Attribute> &recordDescriptor,void* data, int &versionId) {
 	int forwarder = 0;
 	int pageNum, slotNum;
 	this->getForwarderValues(forwarder, pageNum, slotNum);
 	if (forwarder == 0) {
 		InternalRecord *internalRecord = new InternalRecord();
 		internalRecord->data = ((char*)this->data)+FORWARDER_SIZE;
-		internalRecord->unParse(recordDescriptor,data);
+		internalRecord->unParse(recordDescriptor,data, versionId);
 	}
 	else {
 		this->pageNum = pageNum;
@@ -788,7 +798,7 @@ RC RecordForwarder::unparse(const vector<Attribute> &recordDescriptor,void* data
 }
 
 InternalRecord* RecordForwarder::getInternalRecData() {
-	int pageNum, slotNum, forwarder;
+	int pageNum, slotNum, forwarder=-1;
 	InternalRecord *internalRecord;
 	this->getForwarderValues(forwarder, pageNum, slotNum);
 	if (forwarder == 0) {
