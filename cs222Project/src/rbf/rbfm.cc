@@ -571,8 +571,22 @@ RC RecordBasedFileManager::updateSlotDir(int &currRecordOffset, int &currRecordS
 RC RecordBasedFileManager::shiftRecords(int &currRecordOffset, int &currRecordSize, Page &page){
 
 	int FreeSpaceOffset = page.getFreeSpaceOffset();
-	int rightSideDataSize = FreeSpaceOffset - currRecordOffset- currRecordSize;
-	memcpy((char*)page.data + currRecordOffset, (char*)page.data + currRecordOffset + currRecordSize, rightSideDataSize);
+	int rightSideDataSize = FreeSpaceOffset - currRecordOffset - currRecordSize;
+
+	///
+	void* buffer = malloc(4096);
+	memcpy((char*) buffer,
+			(char*) page.data + currRecordOffset + currRecordSize,
+			rightSideDataSize);
+
+	//memcpy((char*)page.data + rOffset + rSize + threshold_new, (char*)buffer, rightSideDataSize);
+
+//		memcpy((char*) page.data + rOffset, (char*) recordForwarder->data,recordSize);
+
+	//
+	memcpy((char*) page.data + currRecordOffset, (char*) buffer,
+			rightSideDataSize);
+	free(buffer);
 	return 0;
 }
 
