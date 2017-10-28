@@ -491,8 +491,9 @@ RC RecordBasedFileManager::internalReadAttributes(FileHandle &fileHandle, const 
 				if ( recordDescriptorMap.find(attributeName) == recordDescriptorMap.end() ) {
 					// new column => add Null Value
 					isNullArray.push_back(true);
-					int data = 0;
-					dataArray.push_back(&data);
+					int* data = (int*)malloc(sizeof(int));
+					*data = 0;
+					dataArray.push_back(data);
 					continue;
 				} else {
 					// present on the disk, read from disk and add it to array
@@ -521,7 +522,8 @@ RC RecordBasedFileManager::internalReadAttributes(FileHandle &fileHandle, const 
 		mergeAttributesData(newRecordDescriptorForProjections, isNullArray, dataArray, data);
 
 		for (int i = 0; i < attributeNames.size(); ++i) {
-			free(dataArray[i]);
+//				#TODO free this memory
+			//			free(dataArray[i]);
 		}
 		return 0;
 }
