@@ -78,6 +78,22 @@ void getColumnsCatalogRecordDescriptor(vector<Attribute> &recordDescriptor) {
 	recordDescriptor.push_back(attr6);
 }
 
+void RelationManager::printTable(string tableName) {
+	vector<Attribute> attrs;
+	vector<string> projections;
+	this->getAttributes(tableName, attrs);
+	RM_ScanIterator *iter = new RM_ScanIterator();
+	for (int i = 0; i < attrs.size(); ++i) {
+		projections.push_back(attrs[i].name);
+	}
+	this->scan(tableName.c_str(), "", NO_OP, 0, projections, *iter);
+	RID rid;
+	void* record = malloc(PAGE_SIZE);
+	while(iter->getNextTuple(rid, record) != -1) {
+		this->printTuple(attrs, record);
+	}
+}
+
 void* createTableData(vector<Attribute> recordDescriptor,
 		vector<string> tableRecord) {
 	void * data = malloc(1000);
@@ -141,13 +157,16 @@ vector<string> getTableData(vector<Attribute> recordDescriptor, void * data) {
 }
 
 int getNextTableId() {
+	int max_so_far = 1;
 	RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
 	FileHandle fileHandle;
 	vector<Attribute> attrs;
 	getTablesCatalogRecordDescriptor(attrs);
 	vector<string> projectedAttributes;
 	string queryName = attrs[0].name;
-	projectedAttributes.push_back(queryName);
+	for(int i=0; i< attrs.size(); i++) {
+		projectedAttributes.push_back(attrs[i].name);
+	}
 	rbfm->openFile(TABLE_CATALOG_NAME, fileHandle);
     RBFM_ScanIterator* iterator = new RBFM_ScanIterator();
 	rbfm->scan(fileHandle, attrs, queryName, NO_OP, 0, projectedAttributes, *iterator);
@@ -155,13 +174,20 @@ int getNextTableId() {
 	RID rid;
 	void* returned_data = malloc(1000);
 	while(iterator->getNextRecord(rid, returned_data) != -1) {
+		TableCatalogRecord* tcr = new TableCatalogRecord(returned_data);
+		int id;
+		string tableName;
+		tcr->unParse(id, tableName);
+		if(id > max_so_far) {
+			max_so_far = id;
+		}
 		count++;
 	}
 	free(returned_data);
 //	#TODO
 //	delete iterator;
 	rbfm->closeFile(fileHandle);
-	return count+1;
+	return max_so_far+1;
 }
 
 TableCatalogRecord::TableCatalogRecord(void * data) {
@@ -183,7 +209,12 @@ TableCatalogRecord* TableCatalogRecord::parse(const int &id, const string &table
 }
 
 RC TableCatalogRecord::unParse(int &id, string &tableName) {
-	return -1;
+	vector<Attribute> tableAttr;
+	getTablesCatalogRecordDescriptor(tableAttr);
+	vector<string> tableRecord = getTableData(tableAttr, this->data);
+	id = stoi(tableRecord[0]);
+	tableName = tableRecord[1];
+	return 0;
 }
 
 ColumnsCatalogRecord::ColumnsCatalogRecord(void * data) {

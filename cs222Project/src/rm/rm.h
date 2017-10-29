@@ -39,6 +39,8 @@ public:
 
   RC deleteCatalog();
 
+  void printTable(string tableName);
+
   RC createTable(const string &tableName, const vector<Attribute> &attrs);
 
   RC deleteTable(const string &tableName);
