@@ -9,7 +9,7 @@
 #define TABLE_CATALOG_NAME "Tables"
 #define COLUMNS_CATALOG_NAME "Columns"
 
-unordered_map<string, vector<Attribute>> cache;
+//unordered_map<string, vector<Attribute>> cache;
 
 void getTablesCatalogRecordDescriptor(vector<Attribute> &recordDescriptor) {
 
@@ -436,10 +436,10 @@ RC RelationManager:: getTableDetailsByName(const string &tableName, int &tableId
 
 RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &attrs)
 {
-	if(cache.find(tableName) != cache.end()) {
-		attrs = cache[tableName];
-		return 0;
-	}
+//	if(cache.find(tableName) != cache.end()) {
+//		attrs = cache[tableName];
+//		return 0;
+//	}
 	int rc;
 	RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
 	RBFM_ScanIterator * iterator = new RBFM_ScanIterator();
@@ -475,7 +475,7 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
 			attrs.push_back(readAttribute);
 		}
 	}
-	cache[tableName] = attrs;
+//	cache[tableName] = attrs;
 	free(columnsCatalogRecord);
     return 0;
 }

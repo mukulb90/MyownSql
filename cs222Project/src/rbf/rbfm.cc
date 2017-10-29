@@ -307,6 +307,10 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 		return -1;
 
 	RecordForwarder *rf = page->getRecord(rid);
+	if(rf == 0) {
+//		deleted record
+		return this->getNextRecord(returnedRid, data);
+	}
 	int rfPageNum, rfSlotNum;
 	bool dataForwardFlag = rf->isDataForwarder(rfPageNum,rfSlotNum);
 	if(dataForwardFlag){

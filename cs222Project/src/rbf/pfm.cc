@@ -354,7 +354,7 @@ int Page::getAvailableSpace() {
 RecordForwarder* Page::getRecord(const RID &rid) {
 	int offset, recordSize, slotNum=rid.slotNum;
 	int rc = this->getSlot(slotNum, offset, recordSize);
-	if(rc == -1) {
+	if(rc == -1 || recordSize< 0) {
 		return 0;
 	}
 	char* cursor = (char*) this->data;
