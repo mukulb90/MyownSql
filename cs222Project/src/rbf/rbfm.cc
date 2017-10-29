@@ -278,6 +278,9 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 //		first call
 		this->pageNumber = 0;
 		Page* page = fileHandle.file->getPageByIndex(this->pageNumber);
+		if(page == 0) {
+			return -1;
+		}
 		int numberOfSlots = page->getNumberOfSlots();
 		if (numberOfSlots >= 0) {
 			this->slotNumber = 0;
