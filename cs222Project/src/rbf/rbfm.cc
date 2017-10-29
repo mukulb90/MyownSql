@@ -674,6 +674,20 @@ RC RecordBasedFileManager::internalUpdateRecord(FileHandle &fileHandle,
 		}
 	} else {
 		RID Updatedrid;
+		RecordForwarder* rf = page.getRecord(rid);
+		int numberOfSlots = page.getNumberOfSlots();
+		if (rf == 0) {
+			free(pageData);
+			return -1;
+		}
+
+		int redirectPageNum, redirectSlotNum;
+		if (rf->isDataForwarder(redirectPageNum, redirectSlotNum)) {
+			RID redirectRID;
+			redirectRID.pageNum = redirectPageNum;
+			redirectRID.slotNum = redirectSlotNum;
+			rc = deleteRecord(fileHandle, currentRecordDescriptor, redirectRID);
+		}
 		this->insertRecord(fileHandle, currentRecordDescriptor, data, Updatedrid);
 		void *pointerRecord = malloc(12);
 		recordForwarder = RecordForwarder::parse(currentRecordDescriptor, pointerRecord, Updatedrid, true, versionId);
