@@ -505,6 +505,7 @@ Page* PagedFile::getPageByIndex(int index) {
 	}
 	Page* page = new Page();
 	page->deserializeToOffset(this->name, this->getPageStartOffsetByIndex(index), PAGE_SIZE);
+	this->handle->readPageCounter++;
 	return page;
 }
 
