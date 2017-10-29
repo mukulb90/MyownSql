@@ -267,6 +267,7 @@ RBFM_ScanIterator::~RBFM_ScanIterator() {
 }
 
 RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
+	int rc;
 	RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
 	RID rid;
 	if (!fileHandle.file) {
@@ -300,7 +301,20 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 
 	rid.pageNum = this->pageNumber;
 	rid.slotNum = this->slotNumber;
-	int rc = rbfm->internalReadAttribute(fileHandle, recordDescriptors, rid,
+
+	Page* page = fileHandle.file->getPageByIndex(rid.pageNum);
+	if(page == 0)
+		return -1;
+
+	RecordForwarder *rf = page->getRecord(rid);
+	int rfPageNum, rfSlotNum;
+	bool dataForwardFlag = rf->isDataForwarder(rfPageNum,rfSlotNum);
+	if(dataForwardFlag){
+		return this->getNextRecord(returnedRid, data);
+	}
+
+
+	rc = rbfm->internalReadAttribute(fileHandle, recordDescriptors, rid,
 						this->conditionAttribute.name, compAttrValue, versionId);
 
 	if(rc != -1) {
@@ -456,16 +470,12 @@ RC RecordBasedFileManager::internalReadAttributes(FileHandle &fileHandle, const 
 		int rfPageNum, rfSlotNum;
 		bool dataForwardFlag = rf->isDataForwarder(rfPageNum,rfSlotNum);
 		if(dataForwardFlag){
-			Page page;
-			void *rfData = malloc (PAGE_SIZE);
-			fileHandle.readPage(rfPageNum,rfData);
-			int offset, size;
-			int slotNumber = rfSlotNum;
-			page.getSlot(slotNumber, offset, size);
-			char * cursor = (char * ) rfData;
-			void * recordData = (void*)malloc(size);
-			memcpy(recordData, cursor+offset, size);
-			rf->data=recordData;
+			RID redirectRid;
+			redirectRid.pageNum = rfPageNum;
+			redirectRid.slotNum = rfSlotNum;
+			return this->internalReadAttributes(fileHandle, recordDescriptors,
+					redirectRid, attributeNames, data, currentVersionId);
+
 		}
 
 		InternalRecord* ir = rf->getInternalRecData();
@@ -530,7 +540,7 @@ RC RecordBasedFileManager::internalReadAttributes(FileHandle &fileHandle, const 
 
 RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle,
 		const vector<Attribute> &recordDescriptor, const RID &rid) {
-	int rc;
+	int rc=0;
 	if (!fileHandle.file) {
 		return -1;
 	}
@@ -538,20 +548,35 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle,
 	void* pageData = malloc(PAGE_SIZE);
 	fileHandle.readPage(rid.pageNum, pageData);
 	Page page = Page(pageData);
-	int delRecOffset, delRecSize;
-	int slotNumber = rid.slotNum;
-	int pageSlots = page.getNumberOfSlots();
-	rc = page.getSlot(slotNumber, delRecOffset, delRecSize);
-	if(rc == -1) {
-		return rc;
+	int delRecOffset, delRecSize, slotNum=rid.slotNum;
+	page.getSlot(slotNum, delRecOffset, delRecSize);
+	RecordForwarder* rf = page.getRecord(rid);
+	int numberOfSlots = page.getNumberOfSlots();
+	if(rf == 0) {
+		return -1;
 	}
+	if(delRecSize < 0) {
+		return -1;
+	}
+	int redirectPageNum, redirectSlotNum;
+	if(rf->isDataForwarder(redirectPageNum, redirectSlotNum)) {
+		RID redirectRID;
+		redirectRID.pageNum = redirectPageNum;
+		redirectRID.slotNum = redirectSlotNum;
+		rc = this->deleteRecord(fileHandle, recordDescriptor, redirectRID);
+	}
+
+	if(rc == -1) {
+		return -1;
+	}
+
 	shiftRecords(delRecOffset,delRecSize, page);
-	updateSlotDir(delRecOffset, delRecSize, page,  pageSlots);
+	updateSlotDir(delRecOffset, delRecSize, page,  numberOfSlots);
 
 	int newvariable = page.getFreeSpaceOffset() - delRecSize;
 	page.setFreeSpaceOffset(newvariable);
 	delRecSize = -999;
-	page.setSlot(slotNumber, delRecOffset, delRecSize);
+	page.setSlot(slotNum, delRecOffset, delRecSize);
 	fileHandle.writePage(rid.pageNum, page.data);
 	free(pageData);
 	return 0;
@@ -621,7 +646,10 @@ RC RecordBasedFileManager::internalUpdateRecord(FileHandle &fileHandle,
 	int recordSize = recordForwarder->getInternalRecordBytes(currentRecordDescriptor,
 			data, false);
 	int threshold = freePageSpace - recordSize;
-	page.getSlot(slotNumber, rOffset, rSize);
+	int rc = page.getSlot(slotNumber, rOffset, rSize);
+	if(rc == -1) {
+		return rc;
+	}
 
 	if (threshold > 0) {
 		int threshold_new = recordSize - rSize;

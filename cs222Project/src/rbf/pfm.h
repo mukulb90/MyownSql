@@ -116,6 +116,7 @@ public:
 	Page(void * data);
 	~Page();
 
+	RecordForwarder* getRecord(const RID &rid);
 	int getBytes();
 	int mapFromObject(void* data);
 	int mapToObject(void* data);

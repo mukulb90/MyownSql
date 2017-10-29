@@ -351,6 +351,19 @@ int Page::getAvailableSpace() {
 	return PAGE_SIZE - 1 - startOffset - spaceOccupiedBySlotDirectory;
 }
 
+RecordForwarder* Page::getRecord(const RID &rid) {
+	int offset, recordSize, slotNum=rid.slotNum;
+	int rc = this->getSlot(slotNum, offset, recordSize);
+	if(rc == -1) {
+		return 0;
+	}
+	char* cursor = (char*) this->data;
+	RecordForwarder* rf = new RecordForwarder();
+	rf->data = malloc(PAGE_SIZE);
+	memcpy(rf->data, cursor + offset, recordSize);
+	return rf;
+}
+
 RC Page::insertRecord(const vector<Attribute> &recordDescriptor,
 		const void *data, RID &rid, const int &versionId) {
 

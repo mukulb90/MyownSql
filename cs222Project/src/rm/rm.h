@@ -31,6 +31,8 @@ class RelationManager
 public:
   static RelationManager* instance();
 
+  static bool isSystemTable(const string &tableName);
+
   RC createCatalog();
 
   RC deleteCatalog();
