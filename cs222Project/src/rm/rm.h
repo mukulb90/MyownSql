@@ -15,8 +15,10 @@ using namespace std;
 class RM_ScanIterator {
 public:
 
-	RBFM_ScanIterator rbfmIterator;
-  RM_ScanIterator() {};
+	RBFM_ScanIterator* rbfmIterator;
+	RM_ScanIterator() {
+	  this->rbfmIterator = 0;
+	};
   ~RM_ScanIterator() {};
 
   // "data" follows the same format as RelationManager::insertTuple()
@@ -31,15 +33,23 @@ class RelationManager
 public:
   static RelationManager* instance();
 
+  static bool isSystemTable(const string &tableName);
+
   RC createCatalog();
 
   RC deleteCatalog();
+
+  void printTable(string tableName);
 
   RC createTable(const string &tableName, const vector<Attribute> &attrs);
 
   RC deleteTable(const string &tableName);
 
+  RC getTableDetailsByName(const string &tableName, int &tableId, int &versionId);
+
   RC getAttributes(const string &tableName, vector<Attribute> &attrs);
+
+  RC getAttributesVector(const string &tableName, vector<vector<Attribute>> &recordDescriptors);
 
   RC insertTuple(const string &tableName, const void *data, RID &rid);
 
@@ -85,7 +95,7 @@ public:
 
 	void* data;
 
-	static TableCatalogRecord* parse(const int &id, const string &tableName);
+	static TableCatalogRecord* parse(const int &id, const string &tableName, const int &version);
 	RC unParse(int &id, string &tableName);
 };
 
@@ -98,8 +108,8 @@ public:
 
 	void* data;
 
-	static ColumnsCatalogRecord* parse(const int &tableId, const Attribute &attrs, const int &columnIndex);
-	RC unParse(int &tableId, Attribute &attrs, int &columnIndex);
+	static ColumnsCatalogRecord* parse(const int &tableId, const Attribute &attrs, const int &columnIndex, const int &version);
+	RC unParse(int &tableId, Attribute &attrs, int &columnIndex, int &version);
 };
 
 #endif

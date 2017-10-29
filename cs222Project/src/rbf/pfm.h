@@ -13,9 +13,10 @@
 
 using namespace std;
 
-#include <string>
+#include <string.h>
 #include <climits>
 #define PAGE_SIZE 4096
+#define FORWARDER_SIZE 12
 
 using namespace std;
 
@@ -76,12 +77,36 @@ public :
 
 	InternalRecord();
 	static int getInternalRecordBytes(const vector<Attribute> &recordDescriptor, const void* data);
-	static InternalRecord* parse(const vector<Attribute> &recordDescriptor,const void* data);
-	RC unParse(const vector<Attribute> &recordDescriptor, void* data);
+	static InternalRecord* parse(const vector<Attribute> &recordDescriptor,const void* data, const int &versionId);
+	RC unParse(const vector<Attribute> &recordDescriptor, void* data, int &versionId);
 	RC getBytes();
 	RC getAttributeByIndex(const int &index, const vector<Attribute> &recordDescriptor, void* attribute, bool &isNull);
+	RC getVersionId(int &versionId);
+
 
 };
+
+class RecordForwarder {
+
+private:
+
+public :
+	void* data;
+	int pageNum;
+	int slotNum;
+	bool isForwarderFlag = false;
+	RecordForwarder(RID rid);
+	RecordForwarder ();
+//	RecordForwarder (RID rid,bool isForwarderFlag);
+	int getInternalRecordBytes(const vector<Attribute> &recordDescriptor,const void* data, bool isForwardFlag);
+	static RecordForwarder*  parse(const vector<Attribute> &recordDescriptor,const void* data, RID rid,bool isForwarderFlag, const int &versionId);
+	RC unparse(const vector<Attribute> &recordDescriptor, void* data, int &versionId);
+	void setForwarderValues(int &forwarder,int &pageNum, int &slotNum, RID rid);
+	void getForwarderValues(int &forwarder,int &pageNum, int &slotNum);
+	InternalRecord* getInternalRecData();
+	bool isDataForwarder(int &pageNum, int &slotNum);
+};
+
 
 class Page: public Serializable {
 public:
@@ -91,6 +116,7 @@ public:
 	Page(void * data);
 	~Page();
 
+	RecordForwarder* getRecord(const RID &rid);
 	int getBytes();
 	int mapFromObject(void* data);
 	int mapToObject(void* data);
@@ -101,7 +127,7 @@ public:
 	void setNumberOfSlots(int);
 	int getNumberOfSlotsPointer();
 	int getAvailableSpace();
-	RC insertRecord(const vector<Attribute> &recordDescriptor, const void *data, RID &rid);
+	RC insertRecord(const vector<Attribute> &recordDescriptor, const void *data, RID &rid, const int &versionId);
 	static int getRecordSize(const vector<Attribute> &recordDescriptor, const void *data);
 	RC setSlot(int &index, int &offset, int &size);
 	RC getSlot(int &index, int &offset, int &size);

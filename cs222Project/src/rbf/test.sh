@@ -10,6 +10,9 @@ make
 ./rbftest8
 ./rbftest8b
 ./rbftest9
+./rbftest10b
+./rbftest10c
+./rbftest10d
 ./rbftest10
 ./rbftest11
 ./rbftest12
@@ -22,3 +25,5 @@ make
 ./rbftest_p3
 ./rbftest_p4
 ./rbftest_p5
+./rbftest_delete
+./rbftest_update

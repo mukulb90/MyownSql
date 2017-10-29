@@ -73,6 +73,13 @@ int main()
 
     rcmain = createTable("tbl_employee200");
 
+    string tableName = "Tables";
+      rm->printTable(tableName);
+
+      cout << endl;
+      tableName = "Columns";
+      rm->printTable(tableName);
+
     // Add Attributes
     rcmain = RM_TEST_EXTRA_2("tbl_employee200", 7, name2, 22, 180, 6000, 123479765);
 

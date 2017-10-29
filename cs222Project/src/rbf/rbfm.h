@@ -25,13 +25,14 @@ The scan iterator is NOT required to be implemented for the part 1 of the projec
 class RBFM_ScanIterator {
 public:
 	FileHandle fileHandle;
-	vector<Attribute> recordDescriptor;
+	vector<vector<Attribute>> recordDescriptors;
 	Attribute conditionAttribute;
 	CompOp compOp;                  // comparision type such as "<" and "="
 	const void* value;
 	vector<string> attributeNames;
 	int pageNumber;
 	int slotNumber;
+	int versionId;
 
   RBFM_ScanIterator();
   ~RBFM_ScanIterator();
@@ -72,8 +73,10 @@ public:
   //  !!! The same format is used for updateRecord(), the returned data of readRecord(), and readAttribute().
   // For example, refer to the Q8 of Project 1 wiki page.
   RC insertRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, RID &rid);
+  RC internalInsertRecord(FileHandle &fileHandle, const vector<vector<Attribute>> &recordDescriptor, const void *data, RID &rid, const int &versionId);
 
   RC readRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, void *data);
+  RC internalReadRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, void *data, int &versionId);
   
   // This method will be mainly used for debugging/testing. 
   // The format is as follows:
@@ -89,10 +92,22 @@ IMPORTANT, PLEASE READ: All methods below this comment (other than the construct
 
   // Assume the RID does not change after an update
   RC updateRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, const RID &rid);
+  RC internalUpdateRecord(FileHandle &fileHandle, const vector<vector<Attribute>> &recordDescriptors, const void *data, const RID &rid, const int &versionId);
 
   RC readAttribute(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, const string &attributeName, void *data);
+  RC internalReadAttribute(FileHandle &fileHandle, const vector<vector<Attribute>> &recordDescriptors, const RID &rid, const string &attributeName, void *data, int &versionId);
+
+  RC shiftNUpdateRecord(Page &page, int threshold,
+  		int slotNumber, int rOffset, int rSize, int pageSlots, int recordSize,
+  		 RecordForwarder *recordForwarder, FileHandle &fileHandle);
+
+  RC updateSlotDir(int &currRecordOffset, int &currRecordSize, Page &page, int pageSlots);
+  RC shiftRecords(int &currRecordOffset, int &currRecordSize, Page &page);
 
   RC readAttributes(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, const vector<string> &attributeName, void *data);
+  RC internalReadAttributes(FileHandle &fileHandle, const vector<vector<Attribute>> &recordDescriptors, const RID &rid, const vector<string> &attributeName, void *data, const int versionId);
+
+  RC getInternalRecData(const vector<Attribute> &recordDescriptor, FileHandle &fileHandle);
 
   // Scan returns an iterator to allow the caller to go through the results one by one. 
   RC scan(FileHandle &fileHandle,
@@ -102,6 +117,15 @@ IMPORTANT, PLEASE READ: All methods below this comment (other than the construct
       const void *value,                    // used in the comparison
       const vector<string> &attributeNames, // a list of projected attributes
       RBFM_ScanIterator &rbfm_ScanIterator);
+
+  RC internalScan(FileHandle &fileHandle,
+        const vector<vector<Attribute>> &recordDescriptors,
+        const string &conditionAttribute,
+        const CompOp compOp,                  // comparision type such as "<" and "="
+        const void *value,                    // used in the comparison
+        const vector<string> &attributeNames, // a list of projected attributes
+        RBFM_ScanIterator &rbfm_ScanIterator,
+		const int &versionId);
 
 public:
 
