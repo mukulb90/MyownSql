@@ -641,7 +641,7 @@ RC RelationManager::scan(const string &tableName,
    	}
    	this->getAttributesVector(tableName, recordDescriptors);
    	rm_ScanIterator.rbfmIterator = rbfm_ScanIterator;
-   	rbfm->internalScan(fileHandle, recordDescriptors, conditionAttribute, compOp, value, attributeNames, rbfm_ScanIteratorInstance, versionId);
+   	rbfm->internalScan(fileHandle, recordDescriptors, conditionAttribute, compOp, value, attributeNames, *rbfm_ScanIterator, versionId);
    	return 0;
 }
 
