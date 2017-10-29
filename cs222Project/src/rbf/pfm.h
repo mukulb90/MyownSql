@@ -170,7 +170,6 @@ private:
 public:
 	string name;
 	int numberOfPages;
-	vector<Page *> pages;
 	FileHandle* handle;
 
 
@@ -185,6 +184,7 @@ public:
 	int getPageStartOffsetByIndex(int num);
 	int getPageMetaDataSize();
 	int setFileHandle(FileHandle *fileHandle);
+
 };
 
 

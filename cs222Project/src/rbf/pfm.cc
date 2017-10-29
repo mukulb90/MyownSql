@@ -97,16 +97,19 @@ RC FileHandle::internalReadPage(PageNum pageNum, void *data, bool shouldAffectCo
 	if(pageNum >= this->file->numberOfPages) {
 		return -1;
 	}
-		Page * page = this->file->pages[pageNum];
-		memcpy(data, page->data, PAGE_SIZE);
 
-		if(shouldAffectCounters) {
-			this->readPageCounter++;
-			string path = FILE_HANDLE_SERIALIZATION_LOCATION;
-			this->serialize(path);
-		}
+	Page* page = new Page(data);
+	int startOffset = this->file->getPageStartOffsetByIndex(pageNum);
+	page->deserializeToOffset(this->file->name, startOffset, PAGE_SIZE);
+	delete page;
 
-		return 0;
+	if(shouldAffectCounters) {
+		this->readPageCounter++;
+		string path = FILE_HANDLE_SERIALIZATION_LOCATION;
+		this->serialize(path);
+	}
+
+	return 0;
 }
 
 RC FileHandle::writePage(PageNum pageNum, const void *data) {
@@ -115,11 +118,10 @@ RC FileHandle::writePage(PageNum pageNum, const void *data) {
 		return -1;
 	}
 
-	Page * page = this->file->pages[pageNum];
+	Page * page = new Page((void*)data);
 //	this->file->serialize(this->file->name);
-	memcpy(page->data, data, PAGE_SIZE);
 	page->serializeToOffset(this->file->name, this->file->getPageStartOffsetByIndex(pageNum), PAGE_SIZE);
-
+	delete page;
 //	#LOCUS
 //	delete page;
 //	Increment
@@ -132,15 +134,13 @@ RC FileHandle::writePage(PageNum pageNum, const void *data) {
 
 RC FileHandle::appendPage(const void *data) {
 // 	Create a new Page
-	Page * newPage = new Page();
-	memcpy(newPage->data, data, PAGE_SIZE);
-
+	Page * newPage = new Page((void*)data);
 //	Add it to the catalog and increment number of pages
 	this->file->numberOfPages++;
 //	add new page Id to catalog
-	this->file->pages.push_back(newPage);
-	this->file->serialize(this->file->name);
-
+	newPage->serializeToOffset(this->file->name,this->file->getPageStartOffsetByIndex(this->file->numberOfPages-1) , PAGE_SIZE);
+	this->file->serializeToOffset(this->file->name, 0, PAGE_SIZE);
+	delete newPage;
 //	Increment
 	this->appendPageCounter++;
 	string path = FILE_HANDLE_SERIALIZATION_LOCATION;
@@ -208,11 +208,11 @@ Serializable::~Serializable() {
 }
 
 int Serializable::deserialize(string fileName) {
-	return this->deserializeToOffset(fileName, 0, 0);
+	return this->deserializeToOffset(fileName, -1, 0);
 }
 
 int Serializable::serialize(string fileName) {
-	return this->serializeToOffset(fileName, 0, 0);
+	return this->serializeToOffset(fileName, -1, 0);
 }
 
 
@@ -225,7 +225,13 @@ int Serializable::deserializeToOffset(string fileName, int startOffset, int bloc
 	}
 	void* buffer = malloc(size);
 	FILE* handle;
-	handle = fopen(fileName.c_str(), "rb") ;
+	if(startOffset != -1) {
+		handle=fopen(fileName.c_str(), "rb+");
+		fseek(handle, startOffset, SEEK_SET);
+	}
+	else {
+		handle=fopen(fileName.c_str(), "rb");
+	}
 	fread(buffer, size, 1, handle);
 	this->mapToObject(buffer);
 	free(buffer);
@@ -233,7 +239,7 @@ int Serializable::deserializeToOffset(string fileName, int startOffset, int bloc
 	return 0;
 }
 
-int Serializable::serializeToOffset(string fileName,  int startOffset=0, int blockSize=0) {
+int Serializable::serializeToOffset(string fileName,  int startOffset=-1, int blockSize=0) {
 	int memory;
 	if(blockSize == 0) {
 		memory = this->getBytes();
@@ -243,7 +249,7 @@ int Serializable::serializeToOffset(string fileName,  int startOffset=0, int blo
 	void* buffer = malloc(memory);
 	this->mapFromObject(buffer);
 	FILE* handle;
-	if(startOffset != 0) {
+	if(startOffset != -1) {
 		handle=fopen(fileName.c_str(), "rb+");
 		fseek(handle, startOffset, SEEK_SET);
 	}
@@ -494,13 +500,12 @@ int PagedFile::setFileHandle(FileHandle *fileHandle) {
 }
 
 Page* PagedFile::getPageByIndex(int index) {
-	if(index >= this->pages.size()) {
+	if(index >= this->getNumberOfPages()) {
 		return 0;
 	}
-	this->handle->readPageCounter++;
-	string path = FILE_HANDLE_SERIALIZATION_LOCATION;
-//	this->handle->serialize(path);
-	return this->pages[index];
+	Page* page = new Page();
+	page->deserializeToOffset(this->name, this->getPageStartOffsetByIndex(index), PAGE_SIZE);
+	return page;
 }
 
 int PagedFile::getNumberOfPages() {
@@ -527,11 +532,6 @@ int PagedFile::mapFromObject(void* data) {
 	memcpy(cursor, &(this->numberOfPages), sizeof(int));
 	cursor += sizeof(int);
 
-	for(int i=0; i<this->numberOfPages; i++) {
-		Page* page = this->pages[i];
-		memcpy(cursor, page->data, PAGE_SIZE);
-		cursor += PAGE_SIZE;
-	}
 	return 0;
 }
 
@@ -542,7 +542,7 @@ int PagedFile::mapToObject(void* data) {
 	memcpy(&sizeOfFileName, cursor, sizeof(int));
 	cursor += sizeof(int);
 
-	char * name = (char*)malloc(sizeof(sizeOfFileName));
+	char * name = (char*)malloc(sizeOfFileName);
 	memcpy(name, cursor, sizeOfFileName);
 	this->name = string(name);
 
@@ -552,12 +552,6 @@ int PagedFile::mapToObject(void* data) {
 	memcpy(&(this->numberOfPages), cursor, sizeof(int));
 	cursor += sizeof(int);
 
-	for(int i=0; i<this->numberOfPages; i++) {
-		Page * page = new Page();
-		memcpy(page->data, cursor, PAGE_SIZE);
-		this->pages.push_back(page);
-		cursor += PAGE_SIZE;
-	}
 	return 0;
 }
 
@@ -566,10 +560,7 @@ int PagedFile::getPageStartOffsetByIndex(int num) {
 }
 
 int PagedFile::getPageMetaDataSize(){
-	int memoryOccupied=0;
-	memoryOccupied += sizeof(int);
-	memoryOccupied += sizeof(char) * this->name.length()+1;
-	memoryOccupied += sizeof(int);
+	int memoryOccupied=PAGE_SIZE;
 	return memoryOccupied;
 }
 
