@@ -15,8 +15,10 @@ using namespace std;
 class RM_ScanIterator {
 public:
 
-	RBFM_ScanIterator rbfmIterator;
-  RM_ScanIterator() {};
+	RBFM_ScanIterator* rbfmIterator;
+	RM_ScanIterator() {
+	  this->rbfmIterator = 0;
+	};
   ~RM_ScanIterator() {};
 
   // "data" follows the same format as RelationManager::insertTuple()

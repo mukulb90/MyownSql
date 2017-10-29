@@ -629,9 +629,10 @@ RC RelationManager::scan(const string &tableName,
 {
 	int rc;
    RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
-   FileHandle fileHandle;
+   FileHandle fileHandle = FileHandle();
    vector<vector<Attribute>> recordDescriptors;
    RBFM_ScanIterator* rbfm_ScanIterator = new RBFM_ScanIterator();
+   RBFM_ScanIterator rbfm_ScanIteratorInstance = *rbfm_ScanIterator;
    rbfm->openFile(tableName, fileHandle);
    int tableId, versionId;
    	rc = this->getTableDetailsByName(tableName, tableId, versionId);
@@ -639,34 +640,18 @@ RC RelationManager::scan(const string &tableName,
    		return rc;
    	}
    	this->getAttributesVector(tableName, recordDescriptors);
-
-   	rbfm_ScanIterator->fileHandle = fileHandle;
-   	rbfm_ScanIterator->attributeNames = attributeNames;
-   	rbfm_ScanIterator->compOp = compOp;
-   	rbfm_ScanIterator->recordDescriptors = recordDescriptors;
-   	rbfm_ScanIterator->value = value;
-
-   	vector<Attribute> recordDescriptor = recordDescriptors[versionId];
-   	for (int i = 0; i < recordDescriptor.size(); ++i) {
-   		Attribute attr = recordDescriptor[i];
-   		if (attr.name == conditionAttribute) {
-   			rbfm_ScanIterator->conditionAttribute = attr;
-   			break;
-   		}
-   	}
-   	rbfm_ScanIterator->slotNumber = -1;
-   	rbfm_ScanIterator->pageNumber = -1;
-   	rm_ScanIterator.rbfmIterator = *rbfm_ScanIterator;
+   	rm_ScanIterator.rbfmIterator = rbfm_ScanIterator;
+   	rbfm->internalScan(fileHandle, recordDescriptors, conditionAttribute, compOp, value, attributeNames, rbfm_ScanIteratorInstance, versionId);
    	return 0;
 }
 
 
 RC RM_ScanIterator::getNextTuple(RID &rid, void *data) {
-	return this->rbfmIterator.getNextRecord(rid, data);
+	return this->rbfmIterator->getNextRecord(rid, data);
 }
 
 RC RM_ScanIterator::close() {
-	return this->rbfmIterator.close();
+	return this->rbfmIterator->close();
 }
 
 // Extra credit work
