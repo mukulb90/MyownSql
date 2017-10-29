@@ -297,7 +297,7 @@ RC RelationManager::createCatalog()
 RC RelationManager::deleteCatalog()
 {
 	RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
-	return rbfm->destroyFile(TABLE_CATALOG_NAME) && rbfm->destroyFile(COLUMNS_CATALOG_NAME);
+	return rbfm->destroyFile(TABLE_CATALOG_NAME) & rbfm->destroyFile(COLUMNS_CATALOG_NAME);
 }
 
 RC RelationManager::createTable(const string &tableName, const vector<Attribute> &attrs)
