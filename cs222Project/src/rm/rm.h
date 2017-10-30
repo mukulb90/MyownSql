@@ -19,7 +19,10 @@ public:
 	RM_ScanIterator() {
 	  this->rbfmIterator = 0;
 	};
-  ~RM_ScanIterator() {};
+  ~RM_ScanIterator() {
+	  if(this->rbfmIterator!=0)
+	  free(this->rbfmIterator);
+  };
 
   // "data" follows the same format as RelationManager::insertTuple()
   RC getNextTuple(RID &rid, void *data);

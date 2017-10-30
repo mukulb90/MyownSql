@@ -76,6 +76,7 @@ public :
 	void* data;
 
 	InternalRecord();
+	~InternalRecord();
 	static int getInternalRecordBytes(const vector<Attribute> &recordDescriptor, const void* data);
 	static InternalRecord* parse(const vector<Attribute> &recordDescriptor,const void* data, const int &versionId);
 	RC unParse(const vector<Attribute> &recordDescriptor, void* data, int &versionId);
@@ -97,7 +98,7 @@ public :
 	bool isForwarderFlag = false;
 	RecordForwarder(RID rid);
 	RecordForwarder ();
-//	RecordForwarder (RID rid,bool isForwarderFlag);
+	~RecordForwarder();
 	int getInternalRecordBytes(const vector<Attribute> &recordDescriptor,const void* data, bool isForwardFlag);
 	static RecordForwarder*  parse(const vector<Attribute> &recordDescriptor,const void* data, RID rid,bool isForwarderFlag, const int &versionId);
 	RC unparse(const vector<Attribute> &recordDescriptor, void* data, int &versionId);
@@ -224,4 +225,11 @@ public:
 	RC unParse(string &str);
 };
 
+void freeIfNotNull(void * data);
+//{
+//	if(data!=0){
+//		free(data);
+//		data = 0 ;
+//	}
+//}
 #endif

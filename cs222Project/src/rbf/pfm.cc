@@ -13,6 +13,13 @@
 
 using namespace std;
 
+void freeIfNotNull(void * data){
+	if(data!=0){
+		free(data);
+		data = 0 ;
+	}
+}
+
 PagedFileManager* PagedFileManager::_pf_manager = 0;
 
 PagedFileManager* PagedFileManager::instance() {
@@ -101,14 +108,14 @@ RC FileHandle::internalReadPage(PageNum pageNum, void *data, bool shouldAffectCo
 	Page* page = new Page(data);
 	int startOffset = this->file->getPageStartOffsetByIndex(pageNum);
 	page->deserializeToOffset(this->file->name, startOffset, PAGE_SIZE);
-	delete page;
 
 	if(shouldAffectCounters) {
 		this->readPageCounter++;
 		string path = FILE_HANDLE_SERIALIZATION_LOCATION;
 		this->serialize(path);
 	}
-
+	page->data=0;
+	delete page;
 	return 0;
 }
 
@@ -117,14 +124,10 @@ RC FileHandle::writePage(PageNum pageNum, const void *data) {
 	if(pageNum >= this->file->numberOfPages) {
 		return -1;
 	}
-
 	Page * page = new Page((void*)data);
-//	this->file->serialize(this->file->name);
 	page->serializeToOffset(this->file->name, this->file->getPageStartOffsetByIndex(pageNum), PAGE_SIZE);
+	page->data=0;
 	delete page;
-//	#LOCUS
-//	delete page;
-//	Increment
 	this->writePageCounter++;
 	string path = FILE_HANDLE_SERIALIZATION_LOCATION;
 	this->serialize(path);
@@ -133,21 +136,16 @@ RC FileHandle::writePage(PageNum pageNum, const void *data) {
 
 
 RC FileHandle::appendPage(const void *data) {
-// 	Create a new Page
+
 	Page * newPage = new Page((void*)data);
-//	Add it to the catalog and increment number of pages
 	this->file->numberOfPages++;
-//	add new page Id to catalog
 	newPage->serializeToOffset(this->file->name,this->file->getPageStartOffsetByIndex(this->file->numberOfPages-1) , PAGE_SIZE);
 	this->file->serializeToOffset(this->file->name, 0, PAGE_SIZE);
-	delete newPage;
-//	Increment
+		newPage->data=0;
+		delete newPage;
 	this->appendPageCounter++;
 	string path = FILE_HANDLE_SERIALIZATION_LOCATION;
 	this->serialize(path);
-
-	//	#LOCUS
-//	delete newPage;
 	return 0;
 }
 
@@ -292,6 +290,11 @@ Page::Page(void * data) {
 	this->data = data;
 }
 
+Page::~Page() {
+	freeIfNotNull(this->data);
+
+}
+
 int Page::getBytes() {
 	return PAGE_SIZE;
 }
@@ -323,6 +326,8 @@ void Page::setFreeSpaceOffset(int value) {
 int Page::getFreeSpaceOffSetPointer() {
 	return PAGE_SIZE - sizeof(int);
 }
+
+
 
 int Page::getNumberOfSlots() {
 	char * cursor = (char *) data;
@@ -409,8 +414,12 @@ RC Page::insertRecord(const vector<Attribute> &recordDescriptor,
 		this->setFreeSpaceOffset(newOffset);
 		newOffset = this->getFreeSpaceOffset();
 		rid.slotNum = currentSlot;
+		recordForwarder->data=0;
+		delete recordForwarder;
 		return 0;
 	} else {
+		recordForwarder->data=0;
+		delete recordForwarder;
 		return -1;
 	}
 }
@@ -478,9 +487,6 @@ int Page::getRecordSize(const vector<Attribute> &recordDescriptor,
 
 	}
 	return size;
-}
-
-Page::~Page() {
 }
 
 
@@ -667,6 +673,7 @@ InternalRecord* InternalRecord::parse(const vector<Attribute> &recordDescriptor,
 	memcpy(internalCursor + numberOfAttributes*sizeof(unsigned short), &insertionOffset, sizeof(unsigned short));
 
 	record->data = internalData;
+//	free(internalData);
 	return record;
 }
 
@@ -752,10 +759,17 @@ RecordForwarder::RecordForwarder(RID rid) {
 }
 
 
+
+
 RecordForwarder::RecordForwarder(){
 	this->pageNum =-1;
 	this->slotNum = -1;
 	this->data = 0;
+}
+
+RecordForwarder::~RecordForwarder() {
+	freeIfNotNull(this->data);
+
 }
 
 int RecordForwarder::getInternalRecordBytes(const vector<Attribute> &recordDescriptor,const void * data,bool isForwarderFlag) {
@@ -778,10 +792,12 @@ RecordForwarder* RecordForwarder::parse(const vector<Attribute> &recordDescripto
 		recordForwarder->setForwarderValues(forwarder, recordForwarder->pageNum,recordForwarder->slotNum, rid);
 		InternalRecord *internalRecord = InternalRecord::parse(recordDescriptor, data, versionId);
 		memcpy(((char*) recordForwarder->data) + FORWARDER_SIZE,internalRecord->data, internalDataSize - FORWARDER_SIZE);
+
 	}
 	else{
 		int forwarder = 1;
 		recordForwarder->setForwarderValues(forwarder, recordForwarder->pageNum,recordForwarder->slotNum, rid);
+
 	}
 	return recordForwarder;
 }

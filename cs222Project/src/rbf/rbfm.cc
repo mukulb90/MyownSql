@@ -67,6 +67,8 @@ RC RecordBasedFileManager::internalInsertRecord(FileHandle &fileHandle, const ve
 		if(page->insertRecord(recordDescriptor, data, rid, versionId) == 0) {
 			rid.pageNum = i;
 			fileHandle.writePage(i, page->data);
+			page->data=0;
+			delete page;
 			return 0;
 		}
 	}
@@ -75,11 +77,11 @@ RC RecordBasedFileManager::internalInsertRecord(FileHandle &fileHandle, const ve
 	if(pg->insertRecord(recordDescriptor, data, rid, versionId) == 0) {
 		fileHandle.appendPage(pg->data);
 		rid.pageNum = numberOfPages;
-		free(pg->data);
+		pg->data=0;
 		delete pg;
 		return 0;
 	}
-	free(pg->data);
+	pg->data=0;
 	delete pg;
 	return -1;
 }
@@ -109,6 +111,9 @@ RC RecordBasedFileManager::internalReadRecord(FileHandle &fileHandle, const vect
 	recordForwarder->data = recordData;
 	recordForwarder->unparse(recordDescriptor, data, versionId);
 	if (recordForwarder->pageNum == -1) {
+		page.data=0;
+		//freeIfNotNull(recordForwarder->data);
+		delete recordForwarder;
 		return 0;
 	} else {
 		RID redirectRID;
@@ -116,6 +121,9 @@ RC RecordBasedFileManager::internalReadRecord(FileHandle &fileHandle, const vect
 		redirectRID.slotNum = recordForwarder->slotNum;
 		RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
 		rbfm->internalReadRecord(fileHandle, recordDescriptor, redirectRID, data, versionId);
+		page.data=0;
+		//freeIfNotNull(recordForwarder->data);
+		delete recordForwarder;
 	}
 	return 0;
 }
@@ -586,7 +594,6 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle,
 	delRecSize = -999;
 	page.setSlot(slotNum, delRecOffset, delRecSize);
 	fileHandle.writePage(rid.pageNum, page.data);
-	free(pageData);
 	return 0;
 }
 
@@ -614,11 +621,6 @@ RC RecordBasedFileManager::shiftRecords(int &currRecordOffset, int &currRecordSi
 			(char*) page.data + currRecordOffset + currRecordSize,
 			rightSideDataSize);
 
-	//memcpy((char*)page.data + rOffset + rSize + threshold_new, (char*)buffer, rightSideDataSize);
-
-//		memcpy((char*) page.data + rOffset, (char*) recordForwarder->data,recordSize);
-
-	//
 	memcpy((char*) page.data + currRecordOffset, (char*) buffer,
 			rightSideDataSize);
 	free(buffer);
@@ -670,14 +672,12 @@ RC RecordBasedFileManager::internalUpdateRecord(FileHandle &fileHandle,
 			RecordBasedFileManager::shiftNUpdateRecord(page, threshold_new,slotNumber, rOffset, rSize, pageSlots, recordSize,recordForwarder, fileHandle);
 			fileHandle.writePage(rid.pageNum, page.data);
 
-
 		}
 	} else {
 		RID Updatedrid;
 		RecordForwarder* rf = page.getRecord(rid);
 		int numberOfSlots = page.getNumberOfSlots();
 		if (rf == 0) {
-			free(pageData);
 			return -1;
 		}
 
@@ -713,10 +713,12 @@ RC RecordBasedFileManager::internalUpdateRecord(FileHandle &fileHandle,
 		}
 		page.setSlot(slotNumber, rOffset, ridSize);
 		page.setFreeSpaceOffset(page.getFreeSpaceOffset() - threshold_new);
-
 		fileHandle.writePage(rid.pageNum, page.data);
 		free(pointerRecord);
+		free(buffer);
+
 	}
+	delete recordForwarder;
 	return 0;
 }
 
