@@ -33,7 +33,7 @@ PagedFileManager::PagedFileManager() {
 }
 
 PagedFileManager::~PagedFileManager() {
-	delete _pf_manager;
+	_pf_manager = 0;
 }
 
 RC PagedFileManager::createFile(const string &fileName) {
@@ -414,11 +414,9 @@ RC Page::insertRecord(const vector<Attribute> &recordDescriptor,
 		this->setFreeSpaceOffset(newOffset);
 		newOffset = this->getFreeSpaceOffset();
 		rid.slotNum = currentSlot;
-		recordForwarder->data=0;
 		delete recordForwarder;
 		return 0;
 	} else {
-		recordForwarder->data=0;
 		delete recordForwarder;
 		return -1;
 	}
@@ -596,6 +594,10 @@ InternalRecord::InternalRecord(){
 	this->data = 0;
 }
 
+InternalRecord::~InternalRecord() {
+	freeIfNotNull(this->data);
+}
+
 int InternalRecord::getInternalRecordBytes(const vector<Attribute> &recordDescriptor,const void* data){
 	int size = 0;
 	char * cursor = (char *)data;
@@ -624,7 +626,7 @@ int InternalRecord::getInternalRecordBytes(const vector<Attribute> &recordDescri
 			}
 
 	}
-
+	freeIfNotNull(nullBits);
 	return size;
 }
 
@@ -673,7 +675,7 @@ InternalRecord* InternalRecord::parse(const vector<Attribute> &recordDescriptor,
 	memcpy(internalCursor + numberOfAttributes*sizeof(unsigned short), &insertionOffset, sizeof(unsigned short));
 
 	record->data = internalData;
-//	free(internalData);
+	freeIfNotNull(nullBits);
 	return record;
 }
 
@@ -769,7 +771,6 @@ RecordForwarder::RecordForwarder(){
 
 RecordForwarder::~RecordForwarder() {
 	freeIfNotNull(this->data);
-
 }
 
 int RecordForwarder::getInternalRecordBytes(const vector<Attribute> &recordDescriptor,const void * data,bool isForwarderFlag) {
@@ -792,6 +793,7 @@ RecordForwarder* RecordForwarder::parse(const vector<Attribute> &recordDescripto
 		recordForwarder->setForwarderValues(forwarder, recordForwarder->pageNum,recordForwarder->slotNum, rid);
 		InternalRecord *internalRecord = InternalRecord::parse(recordDescriptor, data, versionId);
 		memcpy(((char*) recordForwarder->data) + FORWARDER_SIZE,internalRecord->data, internalDataSize - FORWARDER_SIZE);
+		delete internalRecord;
 
 	}
 	else{

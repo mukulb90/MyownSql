@@ -26,7 +26,7 @@ RecordBasedFileManager::RecordBasedFileManager()
 
 RecordBasedFileManager::~RecordBasedFileManager()
 {
-	delete _rbf_manager;
+	_rbf_manager = 0;
 }
 
 RC RecordBasedFileManager::createFile(const string &fileName) {
@@ -67,21 +67,19 @@ RC RecordBasedFileManager::internalInsertRecord(FileHandle &fileHandle, const ve
 		if(page->insertRecord(recordDescriptor, data, rid, versionId) == 0) {
 			rid.pageNum = i;
 			fileHandle.writePage(i, page->data);
-			page->data=0;
 			delete page;
 			return 0;
 		}
+		delete page;
 	}
 
 	Page* pg = new Page();
 	if(pg->insertRecord(recordDescriptor, data, rid, versionId) == 0) {
 		fileHandle.appendPage(pg->data);
 		rid.pageNum = numberOfPages;
-		pg->data=0;
 		delete pg;
 		return 0;
 	}
-	pg->data=0;
 	delete pg;
 	return -1;
 }
@@ -658,6 +656,7 @@ RC RecordBasedFileManager::internalUpdateRecord(FileHandle &fileHandle,
 	int threshold = freePageSpace - recordSize;
 	int rc = page.getSlot(slotNumber, rOffset, rSize);
 	if(rc == -1) {
+		delete recordForwarder;
 		return rc;
 	}
 
@@ -714,8 +713,8 @@ RC RecordBasedFileManager::internalUpdateRecord(FileHandle &fileHandle,
 		page.setSlot(slotNumber, rOffset, ridSize);
 		page.setFreeSpaceOffset(page.getFreeSpaceOffset() - threshold_new);
 		fileHandle.writePage(rid.pageNum, page.data);
-		free(pointerRecord);
-		free(buffer);
+		freeIfNotNull(pointerRecord);
+		freeIfNotNull(buffer);
 
 	}
 	delete recordForwarder;
