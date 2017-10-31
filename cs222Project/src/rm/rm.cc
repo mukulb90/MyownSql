@@ -410,12 +410,14 @@ RC RelationManager::deleteTable(const string &tableName)
 	rbfm->scan(fileHandle, tableCatalogAttrs, tableNameAttr.name, EQ_OP,
 			(void*) tableName.c_str(), projections, *iterator);
 	int rc = iterator->getNextRecord(rid, tablesCatalogRecord);
+	delete iterator;
 	if(rc == -1) {
 		return rc;
 	}
 
 	vector<string> tablesCatalogParsedRecord = getTableData(projectedAttribute,
 			tablesCatalogRecord);
+	freeIfNotNull(tablesCatalogRecord);
 	string tableId = tablesCatalogParsedRecord[0];
 
 	vector<RID> RIDVector;
@@ -439,7 +441,8 @@ RC RelationManager::deleteTable(const string &tableName)
 	while (iterator1->getNextRecord(ridColumn, columnsCatalogRecord) != -1) {
 		RIDVector.push_back(ridColumn);
 	}
-
+	free(columnsCatalogRecord);
+	delete iterator1;
 	for (int i = 0; i < RIDVector.size(); i++) {
 		ridColumn = RIDVector.at(i);
 		this->deleteTuple(COLUMNS_CATALOG_NAME, ridColumn);
