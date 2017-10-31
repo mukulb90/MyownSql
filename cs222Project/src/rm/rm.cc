@@ -763,7 +763,6 @@ RC RelationManager::dropAttribute(const string &tableName, const string &attribu
 	if(rc == -1) {
 		return rc;
 	}
-	free(columnsCatalogRecord);     // Why free ?
 	delete (iter);
 	free(record);
 	rc = this->updateTuple(TABLE_CATALOG_NAME, newRecord->data, tablesRowRid);
