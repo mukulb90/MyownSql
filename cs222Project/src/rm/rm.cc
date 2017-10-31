@@ -586,7 +586,7 @@ RC RelationManager::insertTuple(const string &tableName, const void *data, RID &
 	this->getAttributesVector(tableName, recordDescriptors);
 	RecordBasedFileManager *rbfm = RecordBasedFileManager::instance();
 	rbfm->openFile(tableName, fileHandle);
-	return rbfm->internalInsertRecord(fileHandle, recordDescriptors, data, rid, currentVersion);
+	return rbfm->internalInsertRecord(fileHandle, recordDescriptors, data, rid, currentVersion, 0);
 }
 
 RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
