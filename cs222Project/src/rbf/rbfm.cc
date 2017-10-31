@@ -281,7 +281,6 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 			if (!fileHandle.file) {
 				return -1;
 			}
-			void * compAttrValue = malloc(this->conditionAttribute.length);
 			if (this->pageNumber == -1 || this->slotNumber == -1) {
 		//		first call
 				this->pageNumber = 0;
@@ -339,7 +338,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 				continue;
 			}
 			delete rf;
-
+			void * compAttrValue = malloc(this->conditionAttribute.length);
 			rc = rbfm->internalReadAttribute(fileHandle, recordDescriptors, duplicateRid,
 								this->conditionAttribute.name, compAttrValue, versionId);
 
@@ -351,6 +350,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
 										returnedRid.pageNum = rid.pageNum;
 										returnedRid.slotNum = rid.slotNum;
+										freeIfNotNull(compAttrValue);
 										return 0;
 									}
 									break;
@@ -361,6 +361,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
 										returnedRid.pageNum = rid.pageNum;
 										returnedRid.slotNum = rid.slotNum;
+										freeIfNotNull(compAttrValue);
 										return 0;
 									}
 									break;
@@ -371,6 +372,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
 										returnedRid.pageNum = rid.pageNum;
 										returnedRid.slotNum = rid.slotNum;
+										freeIfNotNull(compAttrValue);
 										return 0;
 									}
 									break;
@@ -381,6 +383,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
 										returnedRid.pageNum = rid.pageNum;
 										returnedRid.slotNum = rid.slotNum;
+										freeIfNotNull(compAttrValue);
 										return 0;
 									}
 									break;
@@ -391,6 +394,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
 										returnedRid.pageNum = rid.pageNum;
 										returnedRid.slotNum = rid.slotNum;
+										freeIfNotNull(compAttrValue);
 										return 0;
 									}
 									break;
@@ -401,6 +405,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
 										returnedRid.pageNum = rid.pageNum;
 										returnedRid.slotNum = rid.slotNum;
+										freeIfNotNull(compAttrValue);
 										return 0;
 									}
 									break;
@@ -409,10 +414,12 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 									rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
 									returnedRid.pageNum = rid.pageNum;
 									returnedRid.slotNum = rid.slotNum;
+									freeIfNotNull(compAttrValue);
 									return 0;
 								}
-							}
+					}
 			}
+			freeIfNotNull(compAttrValue);
 	}
 }
 

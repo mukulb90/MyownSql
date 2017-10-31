@@ -867,8 +867,8 @@ bool RecordForwarder::isPointedByForwarder() {
 		return false;
 	}
 	bool isPointed = ir->isPointedByForwarder();
-	int pageNum, slotNum;
-	this->isDataForwarder(pageNum, slotNum);
+	ir->data = 0;
+	delete ir;
 	return isPointed;
 }
 

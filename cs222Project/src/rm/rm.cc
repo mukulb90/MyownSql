@@ -183,6 +183,8 @@ int getNextTableId() {
 		if(id > max_so_far) {
 			max_so_far = id;
 		}
+		tcr->data = 0;
+		delete tcr;
 		count++;
 	}
 	freeIfNotNull(returned_data);
@@ -463,7 +465,7 @@ RC RelationManager:: getTableDetailsByName(const string &tableName, int &tableId
 		vector<string> projections;
 		vector<Attribute> projectedAttribute;
 		RID rid;
-		void* tablesCatalogRecord= malloc(1000);
+		void* tablesCatalogRecord= malloc(PAGE_SIZE);
 		projections.push_back(tableIdAttr.name);
 		projections.push_back(tableversionAttr.name);
 		projectedAttribute.push_back(tableIdAttr);
@@ -472,6 +474,7 @@ RC RelationManager:: getTableDetailsByName(const string &tableName, int &tableId
 		int rc = iterator->getNextRecord(rid, tablesCatalogRecord);
 		delete iterator;
 		if(rc == -1) {
+			freeIfNotNull(tablesCatalogRecord);
 			return rc;
 		}
 
@@ -490,7 +493,6 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
 	}
 	int rc;
 	RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
-	RBFM_ScanIterator * iterator = new RBFM_ScanIterator();
 	RID rid;
 	FileHandle fileHandle;
 	int tableIdInt, versionId;
@@ -499,6 +501,7 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
 		return rc;
 	}
 	rbfm->openFile(COLUMNS_CATALOG_NAME, fileHandle);
+	RBFM_ScanIterator * iterator;
 	iterator = new RBFM_ScanIterator();
 	vector<Attribute> columnsCatalogAttrs;
 	getColumnsCatalogRecordDescriptor(columnsCatalogAttrs);
@@ -522,7 +525,10 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
 		if(versionId == readVersion) {
 			attrs.push_back(readAttribute);
 		}
+		ccr->data = 0;
+		delete ccr;
 	}
+	freeIfNotNull(columnsCatalogRecord);
 	this->tableNameToRecordDescriptorMap[tableName] = attrs;
 	//free(columnsCatalogRecord);
 	delete iterator;
@@ -537,7 +543,6 @@ RC RelationManager::getAttributesVector(const string &tableName, vector<vector<A
 	int rc;
 	RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
 	unordered_map<int, vector<Attribute>> versionToRecordDescriptorMap;
-		RBFM_ScanIterator * iterator = new RBFM_ScanIterator();
 		RID rid;
 		FileHandle fileHandle;
 		int tableIdInt, versionId;
@@ -546,6 +551,7 @@ RC RelationManager::getAttributesVector(const string &tableName, vector<vector<A
 			return rc;
 		}
 		rbfm->openFile(COLUMNS_CATALOG_NAME, fileHandle);
+		RBFM_ScanIterator * iterator;
 		iterator = new RBFM_ScanIterator();
 		vector<Attribute> columnsCatalogAttrs;
 		getColumnsCatalogRecordDescriptor(columnsCatalogAttrs);
@@ -565,7 +571,8 @@ RC RelationManager::getAttributesVector(const string &tableName, vector<vector<A
 			int columnIndex;
 			int readVersionId;
 			ccr->unParse(readTableId, readAttribute, columnIndex, readVersionId);
-
+			ccr->data = 0;
+			delete ccr;
 			if(versionToRecordDescriptorMap.find(readVersionId) == versionToRecordDescriptorMap.end()) {
 				vector<Attribute> recordDescriptor;
 				recordDescriptor.push_back(readAttribute);
