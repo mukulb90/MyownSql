@@ -554,6 +554,8 @@ RC RecordBasedFileManager::internalReadAttributes(FileHandle &fileHandle, const 
 		}
 
 		mergeAttributesData(newRecordDescriptorForProjections, isNullArray, dataArray, data);
+		ir->data = 0;
+		delete ir;
 		delete rf;
 		for (int i = 0; i < attributeNames.size(); ++i) {
 //			freeIfNotNull(dataArray[i]);
