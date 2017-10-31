@@ -412,6 +412,7 @@ RC RelationManager::deleteTable(const string &tableName)
 	int rc = iterator->getNextRecord(rid, tablesCatalogRecord);
 	delete iterator;
 	if(rc == -1) {
+		freeIfNotNull(tablesCatalogRecord);
 		return rc;
 	}
 
@@ -749,6 +750,7 @@ RC RelationManager::dropAttribute(const string &tableName, const string &attribu
 		tempAttr = newRecordDescriptor[i];
 		columnsCatalogRecord = ColumnsCatalogRecord::parse(tableId, tempAttr, i, versionId+1);
 		this->insertTuple(COLUMNS_CATALOG_NAME, columnsCatalogRecord->data, rid);
+		delete columnsCatalogRecord;
 	}
 
 	RM_ScanIterator *iter = new RM_ScanIterator();
@@ -792,6 +794,7 @@ RC RelationManager::addAttribute(const string &tableName, const Attribute &attr)
 		tempAttr = currentRecordDescriptor[i];
 		columnsCatalogRecord = ColumnsCatalogRecord::parse(tableId, tempAttr, i, versionId+1);
 		this->insertTuple(COLUMNS_CATALOG_NAME, columnsCatalogRecord->data, rid);
+		delete columnsCatalogRecord;
 	}
 
 	RM_ScanIterator *iter = new RM_ScanIterator();
@@ -805,7 +808,6 @@ RC RelationManager::addAttribute(const string &tableName, const Attribute &attr)
 		return rc;
 	}
 	rc = this->updateTuple(TABLE_CATALOG_NAME, newRecord->data, tablesRowRid);
-	delete columnsCatalogRecord;
 	delete iter;
 	freeIfNotNull(record);
 	delete newRecord;

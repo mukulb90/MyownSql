@@ -309,6 +309,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 						delete page;
 						return RBFM_EOF;
 					}
+					delete page2;
 					this->slotNumber=0;
 				}
 				delete page;
