@@ -27,6 +27,14 @@ typedef struct
   unsigned slotNum;    // slot number in the page
 } RID;
 
+bool operator==(const RID& rid1, const RID& rid2);
+
+struct hashRID
+{
+    size_t operator()(const RID& rid) const {
+        return 111*rid.pageNum + 131*rid.slotNum;
+    }
+};
 
 // Attribute
 typedef enum { TypeInt = 0, TypeReal, TypeVarChar } AttrType;

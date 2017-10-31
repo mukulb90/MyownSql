@@ -20,6 +20,10 @@ void freeIfNotNull(void * data){
 	}
 }
 
+bool operator==(const RID& rid1, const RID& rid2){
+	return ((rid1.pageNum == rid2.pageNum) && (rid1.slotNum == rid2.slotNum));
+};
+
 PagedFileManager* PagedFileManager::_pf_manager = 0;
 
 PagedFileManager* PagedFileManager::instance() {

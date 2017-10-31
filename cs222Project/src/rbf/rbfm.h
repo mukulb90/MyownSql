@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <climits>
+#include <unordered_set>
 
 #include "../rbf/pfm.h"
 
@@ -33,6 +34,7 @@ public:
 	int pageNumber;
 	int slotNumber;
 	int versionId;
+	unordered_set<RID, hashRID> alreadyVisitedRids;
 
   RBFM_ScanIterator();
   ~RBFM_ScanIterator();

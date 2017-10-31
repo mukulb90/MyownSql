@@ -275,135 +275,145 @@ RBFM_ScanIterator::~RBFM_ScanIterator() {
 RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 	int rc;
 	RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
-	RID rid;
-	if (!fileHandle.file) {
-		return -1;
-	}
-	void * compAttrValue = malloc(this->conditionAttribute.length);
-	if (this->pageNumber == -1 || this->slotNumber == -1) {
-//		first call
-		this->pageNumber = 0;
-		Page* page = fileHandle.file->getPageByIndex(this->pageNumber);
-		if(page == 0) {
-			return -1;
-		}
-		int numberOfSlots = page->getNumberOfSlots();
-		if (numberOfSlots >= 0) {
-			this->slotNumber = 0;
-		} else {
-			return -1;
-		}
-	} else {
-		Page* page = fileHandle.file->getPageByIndex(this->pageNumber);
-		int numberOfSlots = page->getNumberOfSlots();
-		if(this->slotNumber+1 < numberOfSlots) {
-			this->slotNumber++;
-		} else {
-			this->pageNumber++;
-			Page* page = fileHandle.file->getPageByIndex(this->pageNumber);
-			if(page == 0) {
-				return RBFM_EOF;
+	while(true) {
+			RID rid;
+			if (!fileHandle.file) {
+				return -1;
 			}
-			this->slotNumber=0;
-		}
-	}
-
-	rid.pageNum = this->pageNumber;
-	rid.slotNum = this->slotNumber;
-
-	Page* page = fileHandle.file->getPageByIndex(rid.pageNum);
-	if(page == 0)
-		return -1;
-
-	RecordForwarder *rf = page->getRecord(rid);
-	if(rf == 0) {
-//		deleted record
-		page = 0;
-		return this->getNextRecord(returnedRid, data);
-	}
-	int rfPageNum, rfSlotNum;
-	bool dataForwardFlag = rf->isDataForwarder(rfPageNum,rfSlotNum);
-	if(dataForwardFlag){
-		return this->getNextRecord(returnedRid, data);
-	}
-
-
-	rc = rbfm->internalReadAttribute(fileHandle, recordDescriptors, rid,
-						this->conditionAttribute.name, compAttrValue, versionId);
-
-	if(rc != -1) {
-		switch (this->compOp) {
-						case EQ_OP: {
-							if (compare(compAttrValue, this->value,
-									this->conditionAttribute) == 0) {
-								rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, rid, this->attributeNames, data, this->versionId);
-								returnedRid.pageNum = rid.pageNum;
-								returnedRid.slotNum = rid.slotNum;
-								return 0;
-							}
-							break;
-						}
-						case LE_OP: {
-							if (compare(compAttrValue, this->value,
-									this->conditionAttribute) >= 0) {
-								rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, rid, this->attributeNames, data, this->versionId);
-								returnedRid.pageNum = rid.pageNum;
-								returnedRid.slotNum = rid.slotNum;
-								return 0;
-							}
-							break;
-						}
-						case LT_OP: {
-							if (compare(compAttrValue, this->value,
-									this->conditionAttribute) > 0) {
-								rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, rid, this->attributeNames, data, this->versionId);
-								returnedRid.pageNum = rid.pageNum;
-								returnedRid.slotNum = rid.slotNum;
-								return 0;
-							}
-							break;
-						}
-						case GT_OP: {
-							if (compare(compAttrValue, this->value,
-									this->conditionAttribute) < 0) {
-								rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, rid, this->attributeNames, data, this->versionId);
-								returnedRid.pageNum = rid.pageNum;
-								returnedRid.slotNum = rid.slotNum;
-								return 0;
-							}
-							break;
-						}
-						case GE_OP: {
-							if (compare(compAttrValue, this->value,
-									this->conditionAttribute) <= 0) {
-								rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, rid, this->attributeNames, data, this->versionId);
-								returnedRid.pageNum = rid.pageNum;
-								returnedRid.slotNum = rid.slotNum;
-								return 0;
-							}
-							break;
-						}
-						case NE_OP: {
-							if (compare(compAttrValue, this->value,
-									this->conditionAttribute) != 0) {
-								rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, rid, this->attributeNames, data, this->versionId);
-								returnedRid.pageNum = rid.pageNum;
-								returnedRid.slotNum = rid.slotNum;
-								return 0;
-							}
-							break;
-						}
-						case NO_OP: {
-							rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, rid, this->attributeNames, data, this->versionId);
-							returnedRid.pageNum = rid.pageNum;
-							returnedRid.slotNum = rid.slotNum;
-							return 0;
-						}
+			void * compAttrValue = malloc(this->conditionAttribute.length);
+			if (this->pageNumber == -1 || this->slotNumber == -1) {
+		//		first call
+				this->pageNumber = 0;
+				Page* page = fileHandle.file->getPageByIndex(this->pageNumber);
+				if(page == 0) {
+					return -1;
+				}
+				int numberOfSlots = page->getNumberOfSlots();
+				if (numberOfSlots >= 0) {
+					this->slotNumber = 0;
+				} else {
+					return -1;
+				}
+			} else {
+				Page* page = fileHandle.file->getPageByIndex(this->pageNumber);
+				int numberOfSlots = page->getNumberOfSlots();
+				if(this->slotNumber+1 < numberOfSlots) {
+					this->slotNumber++;
+				} else {
+					this->pageNumber++;
+					Page* page = fileHandle.file->getPageByIndex(this->pageNumber);
+					if(page == 0) {
+						return RBFM_EOF;
 					}
+					this->slotNumber=0;
+				}
+			}
 
+			rid.pageNum = this->pageNumber;
+			rid.slotNum = this->slotNumber;
+
+			RID duplicateRid;
+			duplicateRid.pageNum = rid.pageNum;
+			duplicateRid.slotNum = rid.slotNum;
+
+			Page* page = fileHandle.file->getPageByIndex(rid.pageNum);
+			if(page == 0)
+				return -1;
+
+			RecordForwarder *rf = page->getRecord(rid);
+			if(rf == 0) {
+		//		deleted record
+				page = 0;
+				continue;
+			}
+			int rfPageNum, rfSlotNum;
+			bool dataForwardFlag = rf->isDataForwarder(rfPageNum,rfSlotNum);
+			if(dataForwardFlag){
+				duplicateRid.pageNum = rfPageNum;
+				duplicateRid.slotNum = rfSlotNum;
+			}
+
+			if(this->alreadyVisitedRids.find(rid) == this->alreadyVisitedRids.end()
+					|| this->alreadyVisitedRids.find(duplicateRid) == this->alreadyVisitedRids.end()){
+				this->alreadyVisitedRids.insert(duplicateRid);
+				this->alreadyVisitedRids.insert(rid);
+			} else {
+				continue;
+			}
+			rc = rbfm->internalReadAttribute(fileHandle, recordDescriptors, duplicateRid,
+								this->conditionAttribute.name, compAttrValue, versionId);
+
+			if(rc != -1) {
+				switch (this->compOp) {
+								case EQ_OP: {
+									if (compare(compAttrValue, this->value,
+											this->conditionAttribute) == 0) {
+										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
+										returnedRid.pageNum = rid.pageNum;
+										returnedRid.slotNum = rid.slotNum;
+										return 0;
+									}
+									break;
+								}
+								case LE_OP: {
+									if (compare(compAttrValue, this->value,
+											this->conditionAttribute) >= 0) {
+										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
+										returnedRid.pageNum = rid.pageNum;
+										returnedRid.slotNum = rid.slotNum;
+										return 0;
+									}
+									break;
+								}
+								case LT_OP: {
+									if (compare(compAttrValue, this->value,
+											this->conditionAttribute) > 0) {
+										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
+										returnedRid.pageNum = rid.pageNum;
+										returnedRid.slotNum = rid.slotNum;
+										return 0;
+									}
+									break;
+								}
+								case GT_OP: {
+									if (compare(compAttrValue, this->value,
+											this->conditionAttribute) < 0) {
+										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
+										returnedRid.pageNum = rid.pageNum;
+										returnedRid.slotNum = rid.slotNum;
+										return 0;
+									}
+									break;
+								}
+								case GE_OP: {
+									if (compare(compAttrValue, this->value,
+											this->conditionAttribute) <= 0) {
+										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
+										returnedRid.pageNum = rid.pageNum;
+										returnedRid.slotNum = rid.slotNum;
+										return 0;
+									}
+									break;
+								}
+								case NE_OP: {
+									if (compare(compAttrValue, this->value,
+											this->conditionAttribute) != 0) {
+										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
+										returnedRid.pageNum = rid.pageNum;
+										returnedRid.slotNum = rid.slotNum;
+										return 0;
+									}
+									break;
+								}
+								case NO_OP: {
+									rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
+									returnedRid.pageNum = rid.pageNum;
+									returnedRid.slotNum = rid.slotNum;
+									return 0;
+								}
+							}
+			}
 	}
-
-	return this->getNextRecord(returnedRid, data);
 }
 
 unordered_map<string, Attribute> getAttributeNameToAttributeMap(const vector<Attribute> &attrs){
