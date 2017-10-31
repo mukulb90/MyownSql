@@ -185,9 +185,8 @@ int getNextTableId() {
 		}
 		count++;
 	}
-	free(returned_data);
-//	#TODO
-//	delete iterator;
+	freeIfNotNull(returned_data);
+	delete iterator;
 	rbfm->closeFile(fileHandle);
 	return max_so_far+1;
 }
@@ -305,11 +304,11 @@ RC RelationManager::createCatalog()
 	TableCatalogRecord* tableCatalogRecord;
 	tableCatalogRecord = TableCatalogRecord::parse(1, TABLE_CATALOG_NAME, 0);
 	rbfm->insertRecord(fileHandle, tablesRecordDescriptor, tableCatalogRecord->data, rid);
-	delete(tableCatalogRecord); // valgrind shows mismatched error // changing it to delete for now
+	delete tableCatalogRecord; // valgrind shows mismatched error // changing it to delete for now
 
 	tableCatalogRecord = TableCatalogRecord::parse(2, COLUMNS_CATALOG_NAME, 0);
 	rbfm->insertRecord(fileHandle, tablesRecordDescriptor, tableCatalogRecord->data, rid);
-	delete(tableCatalogRecord);
+	delete tableCatalogRecord;
 
 	rbfm->closeFile(fileHandle);
 
@@ -325,14 +324,14 @@ RC RelationManager::createCatalog()
 		columnsCatalogRecord = ColumnsCatalogRecord::parse(1, tablesRecordDescriptor[i], i, 0);
 		rbfm->insertRecord(fileHandle, columnsRecordDescriptor, columnsCatalogRecord->data, rid);
 		rbfm->printRecord(columnsRecordDescriptor, columnsCatalogRecord->data);
-		delete(columnsCatalogRecord);
+		delete columnsCatalogRecord;
 	}
 
 	for (int i = 0; i < columnsRecordDescriptor.size(); ++i) {
 		columnsCatalogRecord = ColumnsCatalogRecord::parse(2, columnsRecordDescriptor[i], i, 0);
 		rbfm->insertRecord(fileHandle, columnsRecordDescriptor, columnsCatalogRecord->data, rid);
 		rbfm->printRecord(columnsRecordDescriptor, columnsCatalogRecord->data);
-		delete(columnsCatalogRecord);    // Why free here when there is new
+		delete columnsCatalogRecord;
 	}
 
 	rbfm->closeFile(fileHandle);
@@ -363,6 +362,7 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
 	int tableId = getNextTableId();
 	TableCatalogRecord* tableCatalogRecord = TableCatalogRecord::parse(tableId, tableName, 0);
 	rbfm->insertRecord(fileHandle, tableAttrs, tableCatalogRecord->data, rid);
+	delete tableCatalogRecord;
 	rbfm->closeFile(fileHandle);
 
 //	inserting row in columns catalog
@@ -371,7 +371,7 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
 	for (int i = 0; i < attrs.size(); ++i) {
 		columnsCatalogRecord = ColumnsCatalogRecord::parse(tableId, attrs[i], i, 0);
 		rbfm->insertRecord(fileHandle, columnsAttrs, columnsCatalogRecord->data, rid);
-		delete(columnsCatalogRecord);   // Changing it for now - earlier it was free
+		delete columnsCatalogRecord;
 
 	}
     return 0;
@@ -755,6 +755,7 @@ RC RelationManager::dropAttribute(const string &tableName, const string &attribu
 	delete (iter);
 	free(record);
 	rc = this->updateTuple(TABLE_CATALOG_NAME, newRecord->data, tablesRowRid);
+	delete newRecord;
 	this->invalidateCache(tableName);
 	return rc;
 }
@@ -793,10 +794,11 @@ RC RelationManager::addAttribute(const string &tableName, const Attribute &attr)
 	if(rc == -1) {
 		return rc;
 	}
-	free(columnsCatalogRecord);
-	delete(iter);
-	free(record);
 	rc = this->updateTuple(TABLE_CATALOG_NAME, newRecord->data, tablesRowRid);
+	delete columnsCatalogRecord;
+	delete iter;
+	freeIfNotNull(record);
+	delete newRecord;
 	this->invalidateCache(tableName);
 	return rc;
 }
