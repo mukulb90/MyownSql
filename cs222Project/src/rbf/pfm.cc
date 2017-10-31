@@ -733,6 +733,7 @@ RC InternalRecord::unParse(const vector<Attribute> &recordDescriptor, void* data
 		cursor += length;
 		}
 	}
+	freeIfNotNull(nullBits);
 	return 0;
 }
 
@@ -756,6 +757,7 @@ RC InternalRecord::getAttributeByIndex(const int &index, const vector<Attribute>
 	}
 	memcpy(attributeCursor, startCursor + offsetFromStart, numberOfBytes);
 	isNull = *(nullBits+index);
+	freeIfNotNull(nullBits);
 	return 0;
 }
 
@@ -832,6 +834,8 @@ RC RecordForwarder::unparse(const vector<Attribute> &recordDescriptor,void* data
 		InternalRecord *internalRecord = new InternalRecord();
 		internalRecord->data = ((char*)this->data)+FORWARDER_SIZE;
 		internalRecord->unParse(recordDescriptor,data, versionId, isPointedByForwarder);
+		internalRecord->data = 0;
+		delete internalRecord;
 	}
 	else {
 		this->pageNum = pageNum;
