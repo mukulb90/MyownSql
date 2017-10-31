@@ -756,7 +756,6 @@ RC InternalRecord::getAttributeByIndex(const int &index, const vector<Attribute>
 	}
 	memcpy(attributeCursor, startCursor + offsetFromStart, numberOfBytes);
 	isNull = *(nullBits+index);
-	freeIfNotNull(nullBits);
 	return 0;
 }
 
