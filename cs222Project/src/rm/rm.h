@@ -4,6 +4,7 @@
 
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 #include "../rbf/rbfm.h"
 
@@ -34,9 +35,15 @@ public:
 class RelationManager
 {
 public:
+
+  unordered_map<string, vector<Attribute>> tableNameToRecordDescriptorMap;
+  unordered_map<string, vector<vector<Attribute>>> tableNameToRecordDescriptorsMap;
+
   static RelationManager* instance();
 
   static bool isSystemTable(const string &tableName);
+
+  RC invalidateCache(const string &tableName);
 
   RC createCatalog();
 
