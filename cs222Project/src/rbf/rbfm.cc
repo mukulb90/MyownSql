@@ -293,8 +293,10 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 				if (numberOfSlots >= 0) {
 					this->slotNumber = 0;
 				} else {
+					delete page;
 					return -1;
 				}
+				delete page;
 			} else {
 				Page* page = fileHandle.file->getPageByIndex(this->pageNumber);
 				int numberOfSlots = page->getNumberOfSlots();
@@ -302,12 +304,15 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 					this->slotNumber++;
 				} else {
 					this->pageNumber++;
-					Page* page = fileHandle.file->getPageByIndex(this->pageNumber);
-					if(page == 0) {
+					Page* page2 = fileHandle.file->getPageByIndex(this->pageNumber);
+					if(page2 == 0) {
+						delete page2;
+						delete page;
 						return RBFM_EOF;
 					}
 					this->slotNumber=0;
 				}
+				delete page;
 			}
 
 			rid.pageNum = this->pageNumber;
@@ -318,19 +323,22 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 			duplicateRid.slotNum = rid.slotNum;
 
 			Page* page = fileHandle.file->getPageByIndex(rid.pageNum);
-			if(page == 0)
+			if(page == 0) {
+				delete page;
 				return -1;
+			}
 
 			RecordForwarder *rf = page->getRecord(rid);
+			delete page;
 			if(rf == 0) {
-		//		deleted record
-				page = 0;
 				continue;
 			}
 
 			if(rf->isPointedByForwarder()) {
+				delete rf;
 				continue;
 			}
+			delete rf;
 
 			rc = rbfm->internalReadAttribute(fileHandle, recordDescriptors, duplicateRid,
 								this->conditionAttribute.name, compAttrValue, versionId);
@@ -479,8 +487,8 @@ RC RecordBasedFileManager::internalReadAttributes(FileHandle &fileHandle, const 
 		}
 		void * record = malloc(size);
 		memcpy(record, (char *)page->data + slotOffset, size);
-		//RF
-		//////////////////////////
+		delete page;
+
 		RecordForwarder *rf = new RecordForwarder();
 		rf->data = record;
 		int rfPageNum, rfSlotNum;
@@ -546,10 +554,11 @@ RC RecordBasedFileManager::internalReadAttributes(FileHandle &fileHandle, const 
 		}
 
 		mergeAttributesData(newRecordDescriptorForProjections, isNullArray, dataArray, data);
-
+		ir->data = 0;
+		delete ir;
+		delete rf;
 		for (int i = 0; i < attributeNames.size(); ++i) {
-//				#TODO free this memory
-			//			free(dataArray[i]);
+			free(dataArray[i]);
 		}
 		return 0;
 }
