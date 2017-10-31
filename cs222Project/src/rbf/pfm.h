@@ -86,13 +86,12 @@ public :
 	InternalRecord();
 	~InternalRecord();
 	static int getInternalRecordBytes(const vector<Attribute> &recordDescriptor, const void* data);
-	static InternalRecord* parse(const vector<Attribute> &recordDescriptor,const void* data, const int &versionId);
-	RC unParse(const vector<Attribute> &recordDescriptor, void* data, int &versionId);
+	static InternalRecord* parse(const vector<Attribute> &recordDescriptor,const void* data, const int &versionId, const int &isPointedByForwarder);
+	RC unParse(const vector<Attribute> &recordDescriptor, void* data, int &versionId, int &isPointedByForwarder);
 	RC getBytes();
 	RC getAttributeByIndex(const int &index, const vector<Attribute> &recordDescriptor, void* attribute, bool &isNull);
 	RC getVersionId(int &versionId);
-
-
+	bool isPointedByForwarder();
 };
 
 class RecordForwarder {
@@ -108,12 +107,13 @@ public :
 	RecordForwarder ();
 	~RecordForwarder();
 	int getInternalRecordBytes(const vector<Attribute> &recordDescriptor,const void* data, bool isForwardFlag);
-	static RecordForwarder*  parse(const vector<Attribute> &recordDescriptor,const void* data, RID rid,bool isForwarderFlag, const int &versionId);
-	RC unparse(const vector<Attribute> &recordDescriptor, void* data, int &versionId);
+	static RecordForwarder*  parse(const vector<Attribute> &recordDescriptor,const void* data, RID rid,bool isForwarderFlag, const int &versionId, const int &isPointedByForwarder);
+	RC unparse(const vector<Attribute> &recordDescriptor, void* data, int &versionId, int &isPointedByForwarder);
 	void setForwarderValues(int &forwarder,int &pageNum, int &slotNum, RID rid);
 	void getForwarderValues(int &forwarder,int &pageNum, int &slotNum);
 	InternalRecord* getInternalRecData();
 	bool isDataForwarder(int &pageNum, int &slotNum);
+	bool isPointedByForwarder();
 };
 
 
@@ -136,7 +136,7 @@ public:
 	void setNumberOfSlots(int);
 	int getNumberOfSlotsPointer();
 	int getAvailableSpace();
-	RC insertRecord(const vector<Attribute> &recordDescriptor, const void *data, RID &rid, const int &versionId);
+	RC insertRecord(const vector<Attribute> &recordDescriptor, const void *data, RID &rid, const int &versionId, const int &isPointedByForwarder);
 	static int getRecordSize(const vector<Attribute> &recordDescriptor, const void *data);
 	RC setSlot(int &index, int &offset, int &size);
 	RC getSlot(int &index, int &offset, int &size);

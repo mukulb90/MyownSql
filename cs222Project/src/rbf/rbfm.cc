@@ -52,10 +52,10 @@ RC RecordBasedFileManager::closeFile(FileHandle &fileHandle) {
 RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, RID &rid) {
 	vector<vector<Attribute>> recordDescriptors;
 	recordDescriptors.push_back(recordDescriptor);
-	return this->internalInsertRecord(fileHandle, recordDescriptors, data, rid, 0);
+	return this->internalInsertRecord(fileHandle, recordDescriptors, data, rid, 0, 0);
 }
 
-RC RecordBasedFileManager::internalInsertRecord(FileHandle &fileHandle, const vector<vector<Attribute>> &recordDescriptors, const void *data, RID &rid, const int &versionId) {
+RC RecordBasedFileManager::internalInsertRecord(FileHandle &fileHandle, const vector<vector<Attribute>> &recordDescriptors, const void *data, RID &rid, const int &versionId, const int &isPointedByForwarder) {
 	vector<Attribute> recordDescriptor = recordDescriptors[versionId];
 	if(!fileHandle.file) {
 		return -1;
@@ -64,7 +64,7 @@ RC RecordBasedFileManager::internalInsertRecord(FileHandle &fileHandle, const ve
 
 	for(int i=numberOfPages-1; i>=0 ; i--) {
 		Page* page = fileHandle.file->getPageByIndex(i);
-		if(page->insertRecord(recordDescriptor, data, rid, versionId) == 0) {
+		if(page->insertRecord(recordDescriptor, data, rid, versionId, isPointedByForwarder) == 0) {
 			rid.pageNum = i;
 			fileHandle.writePage(i, page->data);
 			delete page;
@@ -74,7 +74,7 @@ RC RecordBasedFileManager::internalInsertRecord(FileHandle &fileHandle, const ve
 	}
 
 	Page* pg = new Page();
-	if(pg->insertRecord(recordDescriptor, data, rid, versionId) == 0) {
+	if(pg->insertRecord(recordDescriptor, data, rid, versionId, isPointedByForwarder) == 0) {
 		fileHandle.appendPage(pg->data);
 		rid.pageNum = numberOfPages;
 		delete pg;
@@ -107,7 +107,8 @@ RC RecordBasedFileManager::internalReadRecord(FileHandle &fileHandle, const vect
 	memcpy(recordData, cursor+offset, size);
 	RecordForwarder * recordForwarder = new RecordForwarder();
 	recordForwarder->data = recordData;
-	recordForwarder->unparse(recordDescriptor, data, versionId);
+	int isPointedByForwarder = 0;
+	recordForwarder->unparse(recordDescriptor, data, versionId, isPointedByForwarder);
 	if (recordForwarder->pageNum == -1) {
 		page.data=0;
 		//freeIfNotNull(recordForwarder->data);
@@ -326,20 +327,11 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 				page = 0;
 				continue;
 			}
-			int rfPageNum, rfSlotNum;
-			bool dataForwardFlag = rf->isDataForwarder(rfPageNum,rfSlotNum);
-			if(dataForwardFlag){
-				duplicateRid.pageNum = rfPageNum;
-				duplicateRid.slotNum = rfSlotNum;
-			}
 
-			if(this->alreadyVisitedRids.find(rid) == this->alreadyVisitedRids.end()
-					|| this->alreadyVisitedRids.find(duplicateRid) == this->alreadyVisitedRids.end()){
-				this->alreadyVisitedRids.insert(duplicateRid);
-				this->alreadyVisitedRids.insert(rid);
-			} else {
+			if(rf->isPointedByForwarder()) {
 				continue;
 			}
+
 			rc = rbfm->internalReadAttribute(fileHandle, recordDescriptors, duplicateRid,
 								this->conditionAttribute.name, compAttrValue, versionId);
 
@@ -660,7 +652,7 @@ RC RecordBasedFileManager::internalUpdateRecord(FileHandle &fileHandle,
 	int freePageSpace = page.getAvailableSpace();
 	int pageSlots = page.getNumberOfSlots();
 	RecordForwarder* recordForwarder = RecordForwarder::parse(currentRecordDescriptor,
-			data, rid, false, versionId);
+			data, rid, false, versionId, 0);
 	int recordSize = recordForwarder->getInternalRecordBytes(currentRecordDescriptor,
 			data, false);
 	int threshold = freePageSpace - recordSize;
@@ -685,7 +677,6 @@ RC RecordBasedFileManager::internalUpdateRecord(FileHandle &fileHandle,
 	} else {
 		RID Updatedrid;
 		RecordForwarder* rf = page.getRecord(rid);
-		int numberOfSlots = page.getNumberOfSlots();
 		if (rf == 0) {
 			return -1;
 		}
@@ -697,9 +688,9 @@ RC RecordBasedFileManager::internalUpdateRecord(FileHandle &fileHandle,
 			redirectRID.slotNum = redirectSlotNum;
 			rc = deleteRecord(fileHandle, currentRecordDescriptor, redirectRID);
 		}
-		this->insertRecord(fileHandle, currentRecordDescriptor, data, Updatedrid);
+		this->internalInsertRecord(fileHandle, recordDescriptors, data, Updatedrid, versionId, 1);
 		void *pointerRecord = malloc(12);
-		recordForwarder = RecordForwarder::parse(currentRecordDescriptor, pointerRecord, Updatedrid, true, versionId);
+		recordForwarder = RecordForwarder::parse(currentRecordDescriptor, pointerRecord, Updatedrid, true, versionId, 0);
 		int threshold_new = rSize-FORWARDER_SIZE ;
 		int ridSize = 3*sizeof(int);
 		int currRecOffset, currRecRize;

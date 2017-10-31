@@ -75,7 +75,7 @@ public:
   //  !!! The same format is used for updateRecord(), the returned data of readRecord(), and readAttribute().
   // For example, refer to the Q8 of Project 1 wiki page.
   RC insertRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, RID &rid);
-  RC internalInsertRecord(FileHandle &fileHandle, const vector<vector<Attribute>> &recordDescriptor, const void *data, RID &rid, const int &versionId);
+  RC internalInsertRecord(FileHandle &fileHandle, const vector<vector<Attribute>> &recordDescriptor, const void *data, RID &rid, const int &versionId, const int &isPointedByForwarder);
 
   RC readRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, void *data);
   RC internalReadRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, void *data, int &versionId);
