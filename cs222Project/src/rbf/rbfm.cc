@@ -490,6 +490,7 @@ RC RecordBasedFileManager::internalReadAttributes(FileHandle &fileHandle, const 
 		int slotNum = rid.slotNum;
 		page->getSlot(slotNum, slotOffset, size);
 		if(size < 0) {
+			delete page;
 			return -1;
 		}
 		void * record = malloc(size);
@@ -588,6 +589,7 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle,
 		return -1;
 	}
 	if(delRecSize < 0) {
+		delete rf;
 		return -1;
 	}
 	int redirectPageNum, redirectSlotNum;
@@ -599,6 +601,7 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle,
 	}
 
 	if(rc == -1) {
+		delete rf;
 		return -1;
 	}
 
@@ -610,6 +613,7 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle,
 	delRecSize = -999;
 	page.setSlot(slotNum, delRecOffset, delRecSize);
 	fileHandle.writePage(rid.pageNum, page.data);
+	delete rf;
 	return 0;
 }
 
