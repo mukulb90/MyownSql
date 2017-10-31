@@ -558,7 +558,7 @@ RC RecordBasedFileManager::internalReadAttributes(FileHandle &fileHandle, const 
 		delete ir;
 		delete rf;
 		for (int i = 0; i < attributeNames.size(); ++i) {
-//			freeIfNotNull(dataArray[i]);
+			free(dataArray[i]);
 		}
 		return 0;
 }
