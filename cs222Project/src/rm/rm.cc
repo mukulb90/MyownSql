@@ -374,7 +374,6 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
 		delete(columnsCatalogRecord);   // Changing it for now - earlier it was free
 
 	}
-	delete tableCatalogRecord;
     return 0;
 }
 
