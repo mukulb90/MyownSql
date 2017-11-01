@@ -4,6 +4,7 @@
 
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 #include "../rbf/rbfm.h"
 
@@ -19,7 +20,10 @@ public:
 	RM_ScanIterator() {
 	  this->rbfmIterator = 0;
 	};
-  ~RM_ScanIterator() {};
+  ~RM_ScanIterator() {
+	  if(this->rbfmIterator!=0)
+	  free(this->rbfmIterator);
+  };
 
   // "data" follows the same format as RelationManager::insertTuple()
   RC getNextTuple(RID &rid, void *data);
@@ -31,9 +35,15 @@ public:
 class RelationManager
 {
 public:
+
+  unordered_map<string, vector<Attribute>> tableNameToRecordDescriptorMap;
+  unordered_map<string, vector<vector<Attribute>>> tableNameToRecordDescriptorsMap;
+
   static RelationManager* instance();
 
   static bool isSystemTable(const string &tableName);
+
+  RC invalidateCache(const string &tableName);
 
   RC createCatalog();
 

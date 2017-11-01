@@ -27,6 +27,14 @@ typedef struct
   unsigned slotNum;    // slot number in the page
 } RID;
 
+bool operator==(const RID& rid1, const RID& rid2);
+
+struct hashRID
+{
+    size_t operator()(const RID& rid) const {
+        return 111*rid.pageNum + 131*rid.slotNum;
+    }
+};
 
 // Attribute
 typedef enum { TypeInt = 0, TypeReal, TypeVarChar } AttrType;
@@ -76,14 +84,14 @@ public :
 	void* data;
 
 	InternalRecord();
+	~InternalRecord();
 	static int getInternalRecordBytes(const vector<Attribute> &recordDescriptor, const void* data);
-	static InternalRecord* parse(const vector<Attribute> &recordDescriptor,const void* data, const int &versionId);
-	RC unParse(const vector<Attribute> &recordDescriptor, void* data, int &versionId);
+	static InternalRecord* parse(const vector<Attribute> &recordDescriptor,const void* data, const int &versionId, const int &isPointedByForwarder);
+	RC unParse(const vector<Attribute> &recordDescriptor, void* data, int &versionId, int &isPointedByForwarder);
 	RC getBytes();
 	RC getAttributeByIndex(const int &index, const vector<Attribute> &recordDescriptor, void* attribute, bool &isNull);
 	RC getVersionId(int &versionId);
-
-
+	bool isPointedByForwarder();
 };
 
 class RecordForwarder {
@@ -97,14 +105,15 @@ public :
 	bool isForwarderFlag = false;
 	RecordForwarder(RID rid);
 	RecordForwarder ();
-//	RecordForwarder (RID rid,bool isForwarderFlag);
+	~RecordForwarder();
 	int getInternalRecordBytes(const vector<Attribute> &recordDescriptor,const void* data, bool isForwardFlag);
-	static RecordForwarder*  parse(const vector<Attribute> &recordDescriptor,const void* data, RID rid,bool isForwarderFlag, const int &versionId);
-	RC unparse(const vector<Attribute> &recordDescriptor, void* data, int &versionId);
+	static RecordForwarder*  parse(const vector<Attribute> &recordDescriptor,const void* data, RID rid,bool isForwarderFlag, const int &versionId, const int &isPointedByForwarder);
+	RC unparse(const vector<Attribute> &recordDescriptor, void* data, int &versionId, int &isPointedByForwarder);
 	void setForwarderValues(int &forwarder,int &pageNum, int &slotNum, RID rid);
 	void getForwarderValues(int &forwarder,int &pageNum, int &slotNum);
 	InternalRecord* getInternalRecData();
 	bool isDataForwarder(int &pageNum, int &slotNum);
+	bool isPointedByForwarder();
 };
 
 
@@ -127,7 +136,7 @@ public:
 	void setNumberOfSlots(int);
 	int getNumberOfSlotsPointer();
 	int getAvailableSpace();
-	RC insertRecord(const vector<Attribute> &recordDescriptor, const void *data, RID &rid, const int &versionId);
+	RC insertRecord(const vector<Attribute> &recordDescriptor, const void *data, RID &rid, const int &versionId, const int &isPointedByForwarder);
 	static int getRecordSize(const vector<Attribute> &recordDescriptor, const void *data);
 	RC setSlot(int &index, int &offset, int &size);
 	RC getSlot(int &index, int &offset, int &size);
@@ -170,7 +179,6 @@ private:
 public:
 	string name;
 	int numberOfPages;
-	vector<Page *> pages;
 	FileHandle* handle;
 
 
@@ -185,6 +193,7 @@ public:
 	int getPageStartOffsetByIndex(int num);
 	int getPageMetaDataSize();
 	int setFileHandle(FileHandle *fileHandle);
+
 };
 
 
@@ -224,4 +233,11 @@ public:
 	RC unParse(string &str);
 };
 
+void freeIfNotNull(void * data);
+//{
+//	if(data!=0){
+//		free(data);
+//		data = 0 ;
+//	}
+//}
 #endif

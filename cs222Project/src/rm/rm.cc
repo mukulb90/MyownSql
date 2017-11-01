@@ -92,6 +92,8 @@ void RelationManager::printTable(string tableName) {
 	while(iter->getNextTuple(rid, record) != -1) {
 		this->printTuple(attrs, record);
 	}
+	freeIfNotNull(record);
+	delete iter;
 }
 
 void* createTableData(vector<Attribute> recordDescriptor,
@@ -181,11 +183,12 @@ int getNextTableId() {
 		if(id > max_so_far) {
 			max_so_far = id;
 		}
+		tcr->data = 0;
+		delete tcr;
 		count++;
 	}
-	free(returned_data);
-//	#TODO
-//	delete iterator;
+	freeIfNotNull(returned_data);
+	delete iterator;
 	rbfm->closeFile(fileHandle);
 	return max_so_far+1;
 }
@@ -194,6 +197,9 @@ TableCatalogRecord::TableCatalogRecord(void * data) {
 	this->data = data;
 }
 
+TableCatalogRecord::~TableCatalogRecord() {
+	freeIfNotNull(this->data);
+}
 
 TableCatalogRecord* TableCatalogRecord::parse(const int &id, const string &tableName, const int &version) {
 	vector<Attribute> attrs;
@@ -219,6 +225,10 @@ RC TableCatalogRecord::unParse(int &id, string &tableName) {
 
 ColumnsCatalogRecord::ColumnsCatalogRecord(void * data) {
 	this->data = data;
+}
+
+ColumnsCatalogRecord::~ColumnsCatalogRecord() {
+	freeIfNotNull(this->data);
 }
 
 
@@ -265,6 +275,12 @@ RelationManager::~RelationManager()
 {
 }
 
+RC RelationManager::invalidateCache(const string &tableName) {
+	this->tableNameToRecordDescriptorMap.erase(tableName);
+	this->tableNameToRecordDescriptorsMap.erase(tableName);
+	return 0;
+}
+
 bool RelationManager::isSystemTable(const string &tableName) {
 	return tableName == TABLE_CATALOG_NAME || tableName == COLUMNS_CATALOG_NAME;
 }
@@ -290,11 +306,11 @@ RC RelationManager::createCatalog()
 	TableCatalogRecord* tableCatalogRecord;
 	tableCatalogRecord = TableCatalogRecord::parse(1, TABLE_CATALOG_NAME, 0);
 	rbfm->insertRecord(fileHandle, tablesRecordDescriptor, tableCatalogRecord->data, rid);
-	free(tableCatalogRecord);
+	delete tableCatalogRecord; // valgrind shows mismatched error // changing it to delete for now
 
 	tableCatalogRecord = TableCatalogRecord::parse(2, COLUMNS_CATALOG_NAME, 0);
 	rbfm->insertRecord(fileHandle, tablesRecordDescriptor, tableCatalogRecord->data, rid);
-	free(tableCatalogRecord);
+	delete tableCatalogRecord;
 
 	rbfm->closeFile(fileHandle);
 
@@ -310,14 +326,14 @@ RC RelationManager::createCatalog()
 		columnsCatalogRecord = ColumnsCatalogRecord::parse(1, tablesRecordDescriptor[i], i, 0);
 		rbfm->insertRecord(fileHandle, columnsRecordDescriptor, columnsCatalogRecord->data, rid);
 		rbfm->printRecord(columnsRecordDescriptor, columnsCatalogRecord->data);
-		free(columnsCatalogRecord);
+		delete columnsCatalogRecord;
 	}
 
 	for (int i = 0; i < columnsRecordDescriptor.size(); ++i) {
 		columnsCatalogRecord = ColumnsCatalogRecord::parse(2, columnsRecordDescriptor[i], i, 0);
 		rbfm->insertRecord(fileHandle, columnsRecordDescriptor, columnsCatalogRecord->data, rid);
 		rbfm->printRecord(columnsRecordDescriptor, columnsCatalogRecord->data);
-		free(columnsCatalogRecord);
+		delete columnsCatalogRecord;
 	}
 
 	rbfm->closeFile(fileHandle);
@@ -327,6 +343,8 @@ RC RelationManager::createCatalog()
 
 RC RelationManager::deleteCatalog()
 {
+	this->tableNameToRecordDescriptorMap.clear();
+	this->tableNameToRecordDescriptorsMap.clear();
 	RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
 	return rbfm->destroyFile(TABLE_CATALOG_NAME) & rbfm->destroyFile(COLUMNS_CATALOG_NAME);
 }
@@ -346,6 +364,7 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
 	int tableId = getNextTableId();
 	TableCatalogRecord* tableCatalogRecord = TableCatalogRecord::parse(tableId, tableName, 0);
 	rbfm->insertRecord(fileHandle, tableAttrs, tableCatalogRecord->data, rid);
+	delete tableCatalogRecord;
 	rbfm->closeFile(fileHandle);
 
 //	inserting row in columns catalog
@@ -354,9 +373,9 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
 	for (int i = 0; i < attrs.size(); ++i) {
 		columnsCatalogRecord = ColumnsCatalogRecord::parse(tableId, attrs[i], i, 0);
 		rbfm->insertRecord(fileHandle, columnsAttrs, columnsCatalogRecord->data, rid);
-		free(columnsCatalogRecord);
-	}
+		delete columnsCatalogRecord;
 
+	}
     return 0;
 }
 
@@ -391,12 +410,15 @@ RC RelationManager::deleteTable(const string &tableName)
 	rbfm->scan(fileHandle, tableCatalogAttrs, tableNameAttr.name, EQ_OP,
 			(void*) tableName.c_str(), projections, *iterator);
 	int rc = iterator->getNextRecord(rid, tablesCatalogRecord);
+	delete iterator;
 	if(rc == -1) {
+		freeIfNotNull(tablesCatalogRecord);
 		return rc;
 	}
 
 	vector<string> tablesCatalogParsedRecord = getTableData(projectedAttribute,
 			tablesCatalogRecord);
+	freeIfNotNull(tablesCatalogRecord);
 	string tableId = tablesCatalogParsedRecord[0];
 
 	vector<RID> RIDVector;
@@ -420,7 +442,8 @@ RC RelationManager::deleteTable(const string &tableName)
 	while (iterator1->getNextRecord(ridColumn, columnsCatalogRecord) != -1) {
 		RIDVector.push_back(ridColumn);
 	}
-
+	free(columnsCatalogRecord);
+	delete iterator1;
 	for (int i = 0; i < RIDVector.size(); i++) {
 		ridColumn = RIDVector.at(i);
 		this->deleteTuple(COLUMNS_CATALOG_NAME, ridColumn);
@@ -429,8 +452,7 @@ RC RelationManager::deleteTable(const string &tableName)
 
 	// Drop table
 	this->deleteTuple(TABLE_CATALOG_NAME,rid);
-
-
+	this->invalidateCache(tableName);
 	return 0;
 }
 
@@ -447,7 +469,7 @@ RC RelationManager:: getTableDetailsByName(const string &tableName, int &tableId
 		vector<string> projections;
 		vector<Attribute> projectedAttribute;
 		RID rid;
-		void* tablesCatalogRecord= malloc(1000);
+		void* tablesCatalogRecord= malloc(PAGE_SIZE);
 		projections.push_back(tableIdAttr.name);
 		projections.push_back(tableversionAttr.name);
 		projectedAttribute.push_back(tableIdAttr);
@@ -456,24 +478,25 @@ RC RelationManager:: getTableDetailsByName(const string &tableName, int &tableId
 		int rc = iterator->getNextRecord(rid, tablesCatalogRecord);
 		delete iterator;
 		if(rc == -1) {
+			freeIfNotNull(tablesCatalogRecord);
 			return rc;
 		}
 
 		vector<string> tablesCatalogParsedRecord  = getTableData(projectedAttribute, tablesCatalogRecord);
 		tableId = stoi(tablesCatalogParsedRecord[0]);
 		versionId = stoi(tablesCatalogParsedRecord[1]);
+		free(tablesCatalogRecord);
 		return 0;
 }
 
 RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &attrs)
 {
-//	if(cache.find(tableName) != cache.end()) {
-//		attrs = cache[tableName];
-//		return 0;
-//	}
+	if(this->tableNameToRecordDescriptorMap.find(tableName) != this->tableNameToRecordDescriptorMap.end()) {
+		attrs = this->tableNameToRecordDescriptorMap[tableName];
+		return 0;
+	}
 	int rc;
 	RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
-	RBFM_ScanIterator * iterator = new RBFM_ScanIterator();
 	RID rid;
 	FileHandle fileHandle;
 	int tableIdInt, versionId;
@@ -482,6 +505,7 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
 		return rc;
 	}
 	rbfm->openFile(COLUMNS_CATALOG_NAME, fileHandle);
+	RBFM_ScanIterator * iterator;
 	iterator = new RBFM_ScanIterator();
 	vector<Attribute> columnsCatalogAttrs;
 	getColumnsCatalogRecordDescriptor(columnsCatalogAttrs);
@@ -494,6 +518,7 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
 
 	rbfm->scan(fileHandle, columnsCatalogAttrs, "table-id", EQ_OP, &tableIdInt  , colmnsCatalogAttrsNames, *iterator);
 	void* columnsCatalogRecord = malloc(2000);
+	map<int, Attribute> columnIndexToAttributeMap;
 	while(iterator->getNextRecord(rid, columnsCatalogRecord) != -1) {
 		ColumnsCatalogRecord* ccr = new ColumnsCatalogRecord(columnsCatalogRecord);
 //		rbfm->printRecord(columnsCatalogAttrs, columnsCatalogRecord);
@@ -503,19 +528,32 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
 		int readVersion;
 		ccr->unParse(readTableId, readAttribute, columnIndex, readVersion);
 		if(versionId == readVersion) {
-			attrs.push_back(readAttribute);
+			columnIndexToAttributeMap[columnIndex] = readAttribute;
 		}
+		ccr->data = 0;
+		delete ccr;
 	}
-//	cache[tableName] = attrs;
-	free(columnsCatalogRecord);
+
+	for (auto iter = columnIndexToAttributeMap.begin(); iter != columnIndexToAttributeMap.end(); iter++)
+	{
+	    attrs.push_back(iter->second);
+	}
+
+	freeIfNotNull(columnsCatalogRecord);
+	this->tableNameToRecordDescriptorMap[tableName] = attrs;
+	//free(columnsCatalogRecord);
+	delete iterator;
     return 0;
 }
 
 RC RelationManager::getAttributesVector(const string &tableName, vector<vector<Attribute>> &recordDescriptors) {
+	if(this->tableNameToRecordDescriptorsMap.find(tableName) != this->tableNameToRecordDescriptorsMap.end()) {
+			recordDescriptors = this->tableNameToRecordDescriptorsMap[tableName];
+			return 0;
+		}
 	int rc;
 	RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
-	unordered_map<int, vector<Attribute>> versionToRecordDescriptorMap;
-		RBFM_ScanIterator * iterator = new RBFM_ScanIterator();
+	map<int, map<int, Attribute>> versionToRecordDescriptorMap;
 		RID rid;
 		FileHandle fileHandle;
 		int tableIdInt, versionId;
@@ -524,6 +562,7 @@ RC RelationManager::getAttributesVector(const string &tableName, vector<vector<A
 			return rc;
 		}
 		rbfm->openFile(COLUMNS_CATALOG_NAME, fileHandle);
+		RBFM_ScanIterator * iterator;
 		iterator = new RBFM_ScanIterator();
 		vector<Attribute> columnsCatalogAttrs;
 		getColumnsCatalogRecordDescriptor(columnsCatalogAttrs);
@@ -543,20 +582,29 @@ RC RelationManager::getAttributesVector(const string &tableName, vector<vector<A
 			int columnIndex;
 			int readVersionId;
 			ccr->unParse(readTableId, readAttribute, columnIndex, readVersionId);
-
+			ccr->data = 0;
+			delete ccr;
 			if(versionToRecordDescriptorMap.find(readVersionId) == versionToRecordDescriptorMap.end()) {
-				vector<Attribute> recordDescriptor;
-				recordDescriptor.push_back(readAttribute);
+				map<int, Attribute> recordDescriptor;
+				recordDescriptor[columnIndex] = readAttribute;
 				versionToRecordDescriptorMap[readVersionId] = recordDescriptor;
 			} else {
-				versionToRecordDescriptorMap[readVersionId].push_back(readAttribute);
+				versionToRecordDescriptorMap[readVersionId][columnIndex] = readAttribute;
 			}
 		}
 		free(columnsCatalogRecord);
 
-		map<int, vector<Attribute>> ordered(versionToRecordDescriptorMap.begin(), versionToRecordDescriptorMap.end());
-		for(auto it = ordered.begin(); it != ordered.end(); ++it)
-		     recordDescriptors.push_back(it->second);
+		for(auto it = versionToRecordDescriptorMap.begin(); it != versionToRecordDescriptorMap.end(); ++it)
+		{
+			vector<Attribute> recordDescriptor;
+			map<int, Attribute>columnOffsetToAttributeMap = it->second;
+			for(auto it2=columnOffsetToAttributeMap.begin(); it2 != columnOffsetToAttributeMap.end(); ++it2) {
+				recordDescriptor.push_back(it2->second);
+			}
+			recordDescriptors.push_back(recordDescriptor);
+		}
+		delete iterator;
+		this->tableNameToRecordDescriptorsMap[tableName] = recordDescriptors;
 	    return 0;
 }
 
@@ -574,7 +622,7 @@ RC RelationManager::insertTuple(const string &tableName, const void *data, RID &
 	this->getAttributesVector(tableName, recordDescriptors);
 	RecordBasedFileManager *rbfm = RecordBasedFileManager::instance();
 	rbfm->openFile(tableName, fileHandle);
-	return rbfm->internalInsertRecord(fileHandle, recordDescriptors, data, rid, currentVersion);
+	return rbfm->internalInsertRecord(fileHandle, recordDescriptors, data, rid, currentVersion, 0);
 }
 
 RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
@@ -673,6 +721,7 @@ RC RelationManager::scan(const string &tableName,
    	this->getAttributesVector(tableName, recordDescriptors);
    	rm_ScanIterator.rbfmIterator = rbfm_ScanIterator;
    	rbfm->internalScan(fileHandle, recordDescriptors, conditionAttribute, compOp, value, attributeNames, *rbfm_ScanIterator, versionId);
+   //	delete rbfm_ScanIterator;
    	return 0;
 }
 
@@ -714,6 +763,7 @@ RC RelationManager::dropAttribute(const string &tableName, const string &attribu
 		tempAttr = newRecordDescriptor[i];
 		columnsCatalogRecord = ColumnsCatalogRecord::parse(tableId, tempAttr, i, versionId+1);
 		this->insertTuple(COLUMNS_CATALOG_NAME, columnsCatalogRecord->data, rid);
+		delete columnsCatalogRecord;
 	}
 
 	RM_ScanIterator *iter = new RM_ScanIterator();
@@ -726,7 +776,12 @@ RC RelationManager::dropAttribute(const string &tableName, const string &attribu
 	if(rc == -1) {
 		return rc;
 	}
-	return this->updateTuple(TABLE_CATALOG_NAME, newRecord->data, tablesRowRid);
+	delete (iter);
+	free(record);
+	rc = this->updateTuple(TABLE_CATALOG_NAME, newRecord->data, tablesRowRid);
+	delete newRecord;
+	this->invalidateCache(tableName);
+	return rc;
 }
 
 // Extra credit work
@@ -751,6 +806,7 @@ RC RelationManager::addAttribute(const string &tableName, const Attribute &attr)
 		tempAttr = currentRecordDescriptor[i];
 		columnsCatalogRecord = ColumnsCatalogRecord::parse(tableId, tempAttr, i, versionId+1);
 		this->insertTuple(COLUMNS_CATALOG_NAME, columnsCatalogRecord->data, rid);
+		delete columnsCatalogRecord;
 	}
 
 	RM_ScanIterator *iter = new RM_ScanIterator();
@@ -763,7 +819,12 @@ RC RelationManager::addAttribute(const string &tableName, const Attribute &attr)
 	if(rc == -1) {
 		return rc;
 	}
-	return this->updateTuple(TABLE_CATALOG_NAME, newRecord->data, tablesRowRid);
+	rc = this->updateTuple(TABLE_CATALOG_NAME, newRecord->data, tablesRowRid);
+	delete iter;
+	freeIfNotNull(record);
+	delete newRecord;
+	this->invalidateCache(tableName);
+	return rc;
 }
 
 

@@ -26,7 +26,7 @@ RecordBasedFileManager::RecordBasedFileManager()
 
 RecordBasedFileManager::~RecordBasedFileManager()
 {
-	delete _rbf_manager;
+	_rbf_manager = 0;
 }
 
 RC RecordBasedFileManager::createFile(const string &fileName) {
@@ -52,34 +52,50 @@ RC RecordBasedFileManager::closeFile(FileHandle &fileHandle) {
 RC RecordBasedFileManager::insertRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, RID &rid) {
 	vector<vector<Attribute>> recordDescriptors;
 	recordDescriptors.push_back(recordDescriptor);
-	return this->internalInsertRecord(fileHandle, recordDescriptors, data, rid, 0);
+	return this->internalInsertRecord(fileHandle, recordDescriptors, data, rid, 0, 0);
 }
 
-RC RecordBasedFileManager::internalInsertRecord(FileHandle &fileHandle, const vector<vector<Attribute>> &recordDescriptors, const void *data, RID &rid, const int &versionId) {
+RC RecordBasedFileManager::internalInsertRecord(FileHandle &fileHandle, const vector<vector<Attribute>> &recordDescriptors, const void *data, RID &rid, const int &versionId, const int &isPointedByForwarder) {
 	vector<Attribute> recordDescriptor = recordDescriptors[versionId];
 	if(!fileHandle.file) {
 		return -1;
 	}
 	int numberOfPages = fileHandle.getNumberOfPages();
+	int lastPage = numberOfPages-1;
 
-	for(int i=numberOfPages-1; i>=0 ; i--) {
-		Page* page = fileHandle.file->getPageByIndex(i);
-		if(page->insertRecord(recordDescriptor, data, rid, versionId) == 0) {
-			rid.pageNum = i;
-			fileHandle.writePage(i, page->data);
-			return 0;
-		}
+//	try inserting at last page
+	if(lastPage >= 0) {
+			Page* page = fileHandle.file->getPageByIndex(lastPage);
+			if(page->insertRecord(recordDescriptor, data, rid, versionId, isPointedByForwarder) == 0) {
+				rid.pageNum = lastPage;
+				fileHandle.writePage(lastPage, page->data);
+				delete page;
+				return 0;
+			}
+			delete page;
 	}
 
+// else try inserting from beginning
+	for(int i=0; i<lastPage ; i++) {
+		Page* page = fileHandle.file->getPageByIndex(i);
+		if(page->insertRecord(recordDescriptor, data, rid, versionId, isPointedByForwarder) == 0) {
+			rid.pageNum = i;
+			fileHandle.writePage(i, page->data);
+			delete page;
+			return 0;
+		}
+		delete page;
+	}
+
+//	otherwise append a new Page
+
 	Page* pg = new Page();
-	if(pg->insertRecord(recordDescriptor, data, rid, versionId) == 0) {
+	if(pg->insertRecord(recordDescriptor, data, rid, versionId, isPointedByForwarder) == 0) {
 		fileHandle.appendPage(pg->data);
 		rid.pageNum = numberOfPages;
-		free(pg->data);
 		delete pg;
 		return 0;
 	}
-	free(pg->data);
 	delete pg;
 	return -1;
 }
@@ -107,8 +123,12 @@ RC RecordBasedFileManager::internalReadRecord(FileHandle &fileHandle, const vect
 	memcpy(recordData, cursor+offset, size);
 	RecordForwarder * recordForwarder = new RecordForwarder();
 	recordForwarder->data = recordData;
-	recordForwarder->unparse(recordDescriptor, data, versionId);
+	int isPointedByForwarder = 0;
+	recordForwarder->unparse(recordDescriptor, data, versionId, isPointedByForwarder);
 	if (recordForwarder->pageNum == -1) {
+		//freeIfNotNull(pageData);
+		pageData = 0 ;
+		delete recordForwarder;
 		return 0;
 	} else {
 		RID redirectRID;
@@ -116,6 +136,9 @@ RC RecordBasedFileManager::internalReadRecord(FileHandle &fileHandle, const vect
 		redirectRID.slotNum = recordForwarder->slotNum;
 		RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
 		rbfm->internalReadRecord(fileHandle, recordDescriptor, redirectRID, data, versionId);
+		//freeIfNotNull(pageData);
+		pageData = 0 ;
+		delete recordForwarder;
 	}
 	return 0;
 }
@@ -269,135 +292,152 @@ RBFM_ScanIterator::~RBFM_ScanIterator() {
 RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 	int rc;
 	RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
-	RID rid;
-	if (!fileHandle.file) {
-		return -1;
-	}
-	void * compAttrValue = malloc(this->conditionAttribute.length);
-	if (this->pageNumber == -1 || this->slotNumber == -1) {
-//		first call
-		this->pageNumber = 0;
-		Page* page = fileHandle.file->getPageByIndex(this->pageNumber);
-		if(page == 0) {
-			return -1;
-		}
-		int numberOfSlots = page->getNumberOfSlots();
-		if (numberOfSlots >= 0) {
-			this->slotNumber = 0;
-		} else {
-			return -1;
-		}
-	} else {
-		Page* page = fileHandle.file->getPageByIndex(this->pageNumber);
-		int numberOfSlots = page->getNumberOfSlots();
-		if(this->slotNumber+1 < numberOfSlots) {
-			this->slotNumber++;
-		} else {
-			this->pageNumber++;
-			Page* page = fileHandle.file->getPageByIndex(this->pageNumber);
-			if(page == 0) {
-				return RBFM_EOF;
+	while(true) {
+			RID rid;
+			if (!fileHandle.file) {
+				return -1;
 			}
-			this->slotNumber=0;
-		}
-	}
-
-	rid.pageNum = this->pageNumber;
-	rid.slotNum = this->slotNumber;
-
-	Page* page = fileHandle.file->getPageByIndex(rid.pageNum);
-	if(page == 0)
-		return -1;
-
-	RecordForwarder *rf = page->getRecord(rid);
-	if(rf == 0) {
-//		deleted record
-		page = 0;
-		return this->getNextRecord(returnedRid, data);
-	}
-	int rfPageNum, rfSlotNum;
-	bool dataForwardFlag = rf->isDataForwarder(rfPageNum,rfSlotNum);
-	if(dataForwardFlag){
-		return this->getNextRecord(returnedRid, data);
-	}
-
-
-	rc = rbfm->internalReadAttribute(fileHandle, recordDescriptors, rid,
-						this->conditionAttribute.name, compAttrValue, versionId);
-
-	if(rc != -1) {
-		switch (this->compOp) {
-						case EQ_OP: {
-							if (compare(compAttrValue, this->value,
-									this->conditionAttribute) == 0) {
-								rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, rid, this->attributeNames, data, this->versionId);
-								returnedRid.pageNum = rid.pageNum;
-								returnedRid.slotNum = rid.slotNum;
-								return 0;
-							}
-							break;
-						}
-						case LE_OP: {
-							if (compare(compAttrValue, this->value,
-									this->conditionAttribute) >= 0) {
-								rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, rid, this->attributeNames, data, this->versionId);
-								returnedRid.pageNum = rid.pageNum;
-								returnedRid.slotNum = rid.slotNum;
-								return 0;
-							}
-							break;
-						}
-						case LT_OP: {
-							if (compare(compAttrValue, this->value,
-									this->conditionAttribute) > 0) {
-								rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, rid, this->attributeNames, data, this->versionId);
-								returnedRid.pageNum = rid.pageNum;
-								returnedRid.slotNum = rid.slotNum;
-								return 0;
-							}
-							break;
-						}
-						case GT_OP: {
-							if (compare(compAttrValue, this->value,
-									this->conditionAttribute) < 0) {
-								rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, rid, this->attributeNames, data, this->versionId);
-								returnedRid.pageNum = rid.pageNum;
-								returnedRid.slotNum = rid.slotNum;
-								return 0;
-							}
-							break;
-						}
-						case GE_OP: {
-							if (compare(compAttrValue, this->value,
-									this->conditionAttribute) <= 0) {
-								rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, rid, this->attributeNames, data, this->versionId);
-								returnedRid.pageNum = rid.pageNum;
-								returnedRid.slotNum = rid.slotNum;
-								return 0;
-							}
-							break;
-						}
-						case NE_OP: {
-							if (compare(compAttrValue, this->value,
-									this->conditionAttribute) != 0) {
-								rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, rid, this->attributeNames, data, this->versionId);
-								returnedRid.pageNum = rid.pageNum;
-								returnedRid.slotNum = rid.slotNum;
-								return 0;
-							}
-							break;
-						}
-						case NO_OP: {
-							rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, rid, this->attributeNames, data, this->versionId);
-							returnedRid.pageNum = rid.pageNum;
-							returnedRid.slotNum = rid.slotNum;
-							return 0;
-						}
+			if (this->pageNumber == -1 || this->slotNumber == -1) {
+		//		first call
+				this->pageNumber = 0;
+				Page* page = fileHandle.file->getPageByIndex(this->pageNumber);
+				if(page == 0) {
+					return -1;
+				}
+				int numberOfSlots = page->getNumberOfSlots();
+				if (numberOfSlots >= 0) {
+					this->slotNumber = 0;
+				} else {
+					delete page;
+					return -1;
+				}
+				delete page;
+			} else {
+				Page* page = fileHandle.file->getPageByIndex(this->pageNumber);
+				int numberOfSlots = page->getNumberOfSlots();
+				if(this->slotNumber+1 < numberOfSlots) {
+					this->slotNumber++;
+				} else {
+					this->pageNumber++;
+					Page* page2 = fileHandle.file->getPageByIndex(this->pageNumber);
+					if(page2 == 0) {
+						delete page2;
+						delete page;
+						return RBFM_EOF;
 					}
+					delete page2;
+					this->slotNumber=0;
+				}
+				delete page;
+			}
 
+			rid.pageNum = this->pageNumber;
+			rid.slotNum = this->slotNumber;
+
+			RID duplicateRid;
+			duplicateRid.pageNum = rid.pageNum;
+			duplicateRid.slotNum = rid.slotNum;
+
+			Page* page = fileHandle.file->getPageByIndex(rid.pageNum);
+			if(page == 0) {
+				delete page;
+				return -1;
+			}
+
+			RecordForwarder *rf = page->getRecord(rid);
+			delete page;
+			if(rf == 0) {
+				continue;
+			}
+
+			if(rf->isPointedByForwarder()) {
+				delete rf;
+				continue;
+			}
+			delete rf;
+			void * compAttrValue = malloc(this->conditionAttribute.length);
+			rc = rbfm->internalReadAttribute(fileHandle, recordDescriptors, duplicateRid,
+								this->conditionAttribute.name, compAttrValue, versionId);
+
+			if(rc != -1) {
+				switch (this->compOp) {
+								case EQ_OP: {
+									if (compare(compAttrValue, this->value,
+											this->conditionAttribute) == 0) {
+										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
+										returnedRid.pageNum = rid.pageNum;
+										returnedRid.slotNum = rid.slotNum;
+										freeIfNotNull(compAttrValue);
+										return 0;
+									}
+									break;
+								}
+								case LE_OP: {
+									if (compare(compAttrValue, this->value,
+											this->conditionAttribute) >= 0) {
+										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
+										returnedRid.pageNum = rid.pageNum;
+										returnedRid.slotNum = rid.slotNum;
+										freeIfNotNull(compAttrValue);
+										return 0;
+									}
+									break;
+								}
+								case LT_OP: {
+									if (compare(compAttrValue, this->value,
+											this->conditionAttribute) > 0) {
+										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
+										returnedRid.pageNum = rid.pageNum;
+										returnedRid.slotNum = rid.slotNum;
+										freeIfNotNull(compAttrValue);
+										return 0;
+									}
+									break;
+								}
+								case GT_OP: {
+									if (compare(compAttrValue, this->value,
+											this->conditionAttribute) < 0) {
+										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
+										returnedRid.pageNum = rid.pageNum;
+										returnedRid.slotNum = rid.slotNum;
+										freeIfNotNull(compAttrValue);
+										return 0;
+									}
+									break;
+								}
+								case GE_OP: {
+									if (compare(compAttrValue, this->value,
+											this->conditionAttribute) <= 0) {
+										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
+										returnedRid.pageNum = rid.pageNum;
+										returnedRid.slotNum = rid.slotNum;
+										freeIfNotNull(compAttrValue);
+										return 0;
+									}
+									break;
+								}
+								case NE_OP: {
+									if (compare(compAttrValue, this->value,
+											this->conditionAttribute) != 0) {
+										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
+										returnedRid.pageNum = rid.pageNum;
+										returnedRid.slotNum = rid.slotNum;
+										freeIfNotNull(compAttrValue);
+										return 0;
+									}
+									break;
+								}
+								case NO_OP: {
+									rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
+									returnedRid.pageNum = rid.pageNum;
+									returnedRid.slotNum = rid.slotNum;
+									freeIfNotNull(compAttrValue);
+									return 0;
+								}
+					}
+			}
+			freeIfNotNull(compAttrValue);
 	}
-
-	return this->getNextRecord(returnedRid, data);
 }
 
 unordered_map<string, Attribute> getAttributeNameToAttributeMap(const vector<Attribute> &attrs){
@@ -467,12 +507,13 @@ RC RecordBasedFileManager::internalReadAttributes(FileHandle &fileHandle, const 
 		int slotNum = rid.slotNum;
 		page->getSlot(slotNum, slotOffset, size);
 		if(size < 0) {
+			delete page;
 			return -1;
 		}
 		void * record = malloc(size);
 		memcpy(record, (char *)page->data + slotOffset, size);
-		//RF
-		//////////////////////////
+		delete page;
+
 		RecordForwarder *rf = new RecordForwarder();
 		rf->data = record;
 		int rfPageNum, rfSlotNum;
@@ -510,9 +551,9 @@ RC RecordBasedFileManager::internalReadAttributes(FileHandle &fileHandle, const 
 					// new column => add Null Value
 					isNullArray.push_back(true);
 					int* data = (int*)malloc(sizeof(int));
-					*data = 0;
+					int value = 0;
+					memcpy(data, &value, sizeof(int));
 					dataArray.push_back(data);
-					continue;
 				} else {
 					// present on the disk, read from disk and add it to array
 					void * attributeData;
@@ -538,11 +579,12 @@ RC RecordBasedFileManager::internalReadAttributes(FileHandle &fileHandle, const 
 		}
 
 		mergeAttributesData(newRecordDescriptorForProjections, isNullArray, dataArray, data);
-
-		for (int i = 0; i < attributeNames.size(); ++i) {
-//				#TODO free this memory
-			//			free(dataArray[i]);
+		for (int i = 0; i < newRecordDescriptorForProjections.size(); ++i) {
+			freeIfNotNull(dataArray[i]);
 		}
+		ir->data = 0;
+		delete ir;
+		delete rf;
 		return 0;
 }
 
@@ -561,9 +603,11 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle,
 	RecordForwarder* rf = page.getRecord(rid);
 	int numberOfSlots = page.getNumberOfSlots();
 	if(rf == 0) {
+		delete rf;
 		return -1;
 	}
 	if(delRecSize < 0) {
+		delete rf;
 		return -1;
 	}
 	int redirectPageNum, redirectSlotNum;
@@ -575,6 +619,7 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle,
 	}
 
 	if(rc == -1) {
+		delete rf;
 		return -1;
 	}
 
@@ -586,7 +631,7 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle,
 	delRecSize = -999;
 	page.setSlot(slotNum, delRecOffset, delRecSize);
 	fileHandle.writePage(rid.pageNum, page.data);
-	free(pageData);
+	delete rf;
 	return 0;
 }
 
@@ -614,11 +659,6 @@ RC RecordBasedFileManager::shiftRecords(int &currRecordOffset, int &currRecordSi
 			(char*) page.data + currRecordOffset + currRecordSize,
 			rightSideDataSize);
 
-	//memcpy((char*)page.data + rOffset + rSize + threshold_new, (char*)buffer, rightSideDataSize);
-
-//		memcpy((char*) page.data + rOffset, (char*) recordForwarder->data,recordSize);
-
-	//
 	memcpy((char*) page.data + currRecordOffset, (char*) buffer,
 			rightSideDataSize);
 	free(buffer);
@@ -650,12 +690,13 @@ RC RecordBasedFileManager::internalUpdateRecord(FileHandle &fileHandle,
 	int freePageSpace = page.getAvailableSpace();
 	int pageSlots = page.getNumberOfSlots();
 	RecordForwarder* recordForwarder = RecordForwarder::parse(currentRecordDescriptor,
-			data, rid, false, versionId);
+			data, rid, false, versionId, 0);
 	int recordSize = recordForwarder->getInternalRecordBytes(currentRecordDescriptor,
 			data, false);
 	int threshold = freePageSpace - recordSize;
 	int rc = page.getSlot(slotNumber, rOffset, rSize);
 	if(rc == -1) {
+		delete recordForwarder;
 		return rc;
 	}
 
@@ -670,14 +711,12 @@ RC RecordBasedFileManager::internalUpdateRecord(FileHandle &fileHandle,
 			RecordBasedFileManager::shiftNUpdateRecord(page, threshold_new,slotNumber, rOffset, rSize, pageSlots, recordSize,recordForwarder, fileHandle);
 			fileHandle.writePage(rid.pageNum, page.data);
 
-
 		}
 	} else {
 		RID Updatedrid;
 		RecordForwarder* rf = page.getRecord(rid);
-		int numberOfSlots = page.getNumberOfSlots();
 		if (rf == 0) {
-			free(pageData);
+			delete rf;
 			return -1;
 		}
 
@@ -688,9 +727,9 @@ RC RecordBasedFileManager::internalUpdateRecord(FileHandle &fileHandle,
 			redirectRID.slotNum = redirectSlotNum;
 			rc = deleteRecord(fileHandle, currentRecordDescriptor, redirectRID);
 		}
-		this->insertRecord(fileHandle, currentRecordDescriptor, data, Updatedrid);
+		this->internalInsertRecord(fileHandle, recordDescriptors, data, Updatedrid, versionId, 1);
 		void *pointerRecord = malloc(12);
-		recordForwarder = RecordForwarder::parse(currentRecordDescriptor, pointerRecord, Updatedrid, true, versionId);
+		recordForwarder = RecordForwarder::parse(currentRecordDescriptor, pointerRecord, Updatedrid, true, versionId, 0);
 		int threshold_new = rSize-FORWARDER_SIZE ;
 		int ridSize = 3*sizeof(int);
 		int currRecOffset, currRecRize;
@@ -713,10 +752,13 @@ RC RecordBasedFileManager::internalUpdateRecord(FileHandle &fileHandle,
 		}
 		page.setSlot(slotNumber, rOffset, ridSize);
 		page.setFreeSpaceOffset(page.getFreeSpaceOffset() - threshold_new);
-
 		fileHandle.writePage(rid.pageNum, page.data);
-		free(pointerRecord);
+		freeIfNotNull(pointerRecord);
+		freeIfNotNull(buffer);
+		delete rf;
+
 	}
+	delete recordForwarder;
 	return 0;
 }
 

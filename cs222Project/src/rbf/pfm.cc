@@ -13,6 +13,17 @@
 
 using namespace std;
 
+void freeIfNotNull(void * data){
+	if(data!=0){
+		free(data);
+		data = 0 ;
+	}
+}
+
+bool operator==(const RID& rid1, const RID& rid2){
+	return ((rid1.pageNum == rid2.pageNum) && (rid1.slotNum == rid2.slotNum));
+};
+
 PagedFileManager* PagedFileManager::_pf_manager = 0;
 
 PagedFileManager* PagedFileManager::instance() {
@@ -26,7 +37,7 @@ PagedFileManager::PagedFileManager() {
 }
 
 PagedFileManager::~PagedFileManager() {
-	delete _pf_manager;
+	_pf_manager = 0;
 }
 
 RC PagedFileManager::createFile(const string &fileName) {
@@ -97,16 +108,19 @@ RC FileHandle::internalReadPage(PageNum pageNum, void *data, bool shouldAffectCo
 	if(pageNum >= this->file->numberOfPages) {
 		return -1;
 	}
-		Page * page = this->file->pages[pageNum];
-		memcpy(data, page->data, PAGE_SIZE);
 
-		if(shouldAffectCounters) {
-			this->readPageCounter++;
-			string path = FILE_HANDLE_SERIALIZATION_LOCATION;
-			this->serialize(path);
-		}
+	Page* page = new Page(data);
+	int startOffset = this->file->getPageStartOffsetByIndex(pageNum);
+	page->deserializeToOffset(this->file->name, startOffset, PAGE_SIZE);
 
-		return 0;
+	if(shouldAffectCounters) {
+		this->readPageCounter++;
+		string path = FILE_HANDLE_SERIALIZATION_LOCATION;
+		this->serialize(path);
+	}
+	page->data=0;
+	delete page;
+	return 0;
 }
 
 RC FileHandle::writePage(PageNum pageNum, const void *data) {
@@ -114,15 +128,10 @@ RC FileHandle::writePage(PageNum pageNum, const void *data) {
 	if(pageNum >= this->file->numberOfPages) {
 		return -1;
 	}
-
-	Page * page = this->file->pages[pageNum];
-//	this->file->serialize(this->file->name);
-	memcpy(page->data, data, PAGE_SIZE);
+	Page * page = new Page((void*)data);
 	page->serializeToOffset(this->file->name, this->file->getPageStartOffsetByIndex(pageNum), PAGE_SIZE);
-
-//	#LOCUS
-//	delete page;
-//	Increment
+	page->data=0;
+	delete page;
 	this->writePageCounter++;
 	string path = FILE_HANDLE_SERIALIZATION_LOCATION;
 	this->serialize(path);
@@ -131,23 +140,16 @@ RC FileHandle::writePage(PageNum pageNum, const void *data) {
 
 
 RC FileHandle::appendPage(const void *data) {
-// 	Create a new Page
-	Page * newPage = new Page();
-	memcpy(newPage->data, data, PAGE_SIZE);
 
-//	Add it to the catalog and increment number of pages
+	Page * newPage = new Page((void*)data);
 	this->file->numberOfPages++;
-//	add new page Id to catalog
-	this->file->pages.push_back(newPage);
-	this->file->serialize(this->file->name);
-
-//	Increment
+	newPage->serializeToOffset(this->file->name,this->file->getPageStartOffsetByIndex(this->file->numberOfPages-1) , PAGE_SIZE);
+	this->file->serializeToOffset(this->file->name, 0, PAGE_SIZE);
+		newPage->data=0;
+		delete newPage;
 	this->appendPageCounter++;
 	string path = FILE_HANDLE_SERIALIZATION_LOCATION;
 	this->serialize(path);
-
-	//	#LOCUS
-//	delete newPage;
 	return 0;
 }
 
@@ -208,11 +210,11 @@ Serializable::~Serializable() {
 }
 
 int Serializable::deserialize(string fileName) {
-	return this->deserializeToOffset(fileName, 0, 0);
+	return this->deserializeToOffset(fileName, -1, 0);
 }
 
 int Serializable::serialize(string fileName) {
-	return this->serializeToOffset(fileName, 0, 0);
+	return this->serializeToOffset(fileName, -1, 0);
 }
 
 
@@ -225,7 +227,13 @@ int Serializable::deserializeToOffset(string fileName, int startOffset, int bloc
 	}
 	void* buffer = malloc(size);
 	FILE* handle;
-	handle = fopen(fileName.c_str(), "rb") ;
+	if(startOffset != -1) {
+		handle=fopen(fileName.c_str(), "rb+");
+		fseek(handle, startOffset, SEEK_SET);
+	}
+	else {
+		handle=fopen(fileName.c_str(), "rb");
+	}
 	fread(buffer, size, 1, handle);
 	this->mapToObject(buffer);
 	free(buffer);
@@ -233,7 +241,7 @@ int Serializable::deserializeToOffset(string fileName, int startOffset, int bloc
 	return 0;
 }
 
-int Serializable::serializeToOffset(string fileName,  int startOffset=0, int blockSize=0) {
+int Serializable::serializeToOffset(string fileName,  int startOffset=-1, int blockSize=0) {
 	int memory;
 	if(blockSize == 0) {
 		memory = this->getBytes();
@@ -243,7 +251,7 @@ int Serializable::serializeToOffset(string fileName,  int startOffset=0, int blo
 	void* buffer = malloc(memory);
 	this->mapFromObject(buffer);
 	FILE* handle;
-	if(startOffset != 0) {
+	if(startOffset != -1) {
 		handle=fopen(fileName.c_str(), "rb+");
 		fseek(handle, startOffset, SEEK_SET);
 	}
@@ -286,6 +294,11 @@ Page::Page(void * data) {
 	this->data = data;
 }
 
+Page::~Page() {
+	freeIfNotNull(this->data);
+
+}
+
 int Page::getBytes() {
 	return PAGE_SIZE;
 }
@@ -317,6 +330,8 @@ void Page::setFreeSpaceOffset(int value) {
 int Page::getFreeSpaceOffSetPointer() {
 	return PAGE_SIZE - sizeof(int);
 }
+
+
 
 int Page::getNumberOfSlots() {
 	char * cursor = (char *) data;
@@ -365,9 +380,9 @@ RecordForwarder* Page::getRecord(const RID &rid) {
 }
 
 RC Page::insertRecord(const vector<Attribute> &recordDescriptor,
-		const void *data, RID &rid, const int &versionId) {
+		const void *data, RID &rid, const int &versionId, const int &isPointedByForwarder) {
 
-	RecordForwarder* recordForwarder = RecordForwarder::parse(recordDescriptor, data, rid, false, versionId);
+	RecordForwarder* recordForwarder = RecordForwarder::parse(recordDescriptor, data, rid, false, versionId, isPointedByForwarder);
 	int recordSize = recordForwarder->getInternalRecordBytes(recordDescriptor, data, false);
 	int pageSlots = this->getNumberOfSlots();
 	int RecOffset,RecRize,currentSlot,currSlot,spaceRequired;
@@ -403,8 +418,10 @@ RC Page::insertRecord(const vector<Attribute> &recordDescriptor,
 		this->setFreeSpaceOffset(newOffset);
 		newOffset = this->getFreeSpaceOffset();
 		rid.slotNum = currentSlot;
+		delete recordForwarder;
 		return 0;
 	} else {
+		delete recordForwarder;
 		return -1;
 	}
 }
@@ -474,9 +491,6 @@ int Page::getRecordSize(const vector<Attribute> &recordDescriptor,
 	return size;
 }
 
-Page::~Page() {
-}
-
 
 PagedFile::PagedFile(string fileName) {
 	this->name = fileName;
@@ -494,13 +508,13 @@ int PagedFile::setFileHandle(FileHandle *fileHandle) {
 }
 
 Page* PagedFile::getPageByIndex(int index) {
-	if(index >= this->pages.size()) {
+	if(index >= this->getNumberOfPages()) {
 		return 0;
 	}
+	Page* page = new Page();
+	page->deserializeToOffset(this->name, this->getPageStartOffsetByIndex(index), PAGE_SIZE);
 	this->handle->readPageCounter++;
-	string path = FILE_HANDLE_SERIALIZATION_LOCATION;
-//	this->handle->serialize(path);
-	return this->pages[index];
+	return page;
 }
 
 int PagedFile::getNumberOfPages() {
@@ -527,11 +541,6 @@ int PagedFile::mapFromObject(void* data) {
 	memcpy(cursor, &(this->numberOfPages), sizeof(int));
 	cursor += sizeof(int);
 
-	for(int i=0; i<this->numberOfPages; i++) {
-		Page* page = this->pages[i];
-		memcpy(cursor, page->data, PAGE_SIZE);
-		cursor += PAGE_SIZE;
-	}
 	return 0;
 }
 
@@ -542,7 +551,7 @@ int PagedFile::mapToObject(void* data) {
 	memcpy(&sizeOfFileName, cursor, sizeof(int));
 	cursor += sizeof(int);
 
-	char * name = (char*)malloc(sizeof(sizeOfFileName));
+	char * name = (char*)malloc(sizeOfFileName);
 	memcpy(name, cursor, sizeOfFileName);
 	this->name = string(name);
 
@@ -552,12 +561,6 @@ int PagedFile::mapToObject(void* data) {
 	memcpy(&(this->numberOfPages), cursor, sizeof(int));
 	cursor += sizeof(int);
 
-	for(int i=0; i<this->numberOfPages; i++) {
-		Page * page = new Page();
-		memcpy(page->data, cursor, PAGE_SIZE);
-		this->pages.push_back(page);
-		cursor += PAGE_SIZE;
-	}
 	return 0;
 }
 
@@ -566,10 +569,7 @@ int PagedFile::getPageStartOffsetByIndex(int num) {
 }
 
 int PagedFile::getPageMetaDataSize(){
-	int memoryOccupied=0;
-	memoryOccupied += sizeof(int);
-	memoryOccupied += sizeof(char) * this->name.length()+1;
-	memoryOccupied += sizeof(int);
+	int memoryOccupied=PAGE_SIZE;
 	return memoryOccupied;
 }
 
@@ -598,12 +598,17 @@ InternalRecord::InternalRecord(){
 	this->data = 0;
 }
 
+InternalRecord::~InternalRecord() {
+	freeIfNotNull(this->data);
+}
+
 int InternalRecord::getInternalRecordBytes(const vector<Attribute> &recordDescriptor,const void* data){
 	int size = 0;
 	char * cursor = (char *)data;
 	bool * nullBits = getNullBits(recordDescriptor, data);
 	int numberOfNullBytes = getNumberOfNullBytes(recordDescriptor);
 
+	size += sizeof(int);
 	size += sizeof(int);
 	cursor += numberOfNullBytes;
 	size += numberOfNullBytes;
@@ -626,11 +631,11 @@ int InternalRecord::getInternalRecordBytes(const vector<Attribute> &recordDescri
 			}
 
 	}
-
+	freeIfNotNull(nullBits);
 	return size;
 }
 
-InternalRecord* InternalRecord::parse(const vector<Attribute> &recordDescriptor,const void* data, const int &versionId){
+InternalRecord* InternalRecord::parse(const vector<Attribute> &recordDescriptor,const void* data, const int &versionId, const int &isPointedByForwarder){
 	InternalRecord* record = new InternalRecord();
 	bool * nullBits = getNullBits(recordDescriptor, data);
 	char * cursor = (char *)data;
@@ -640,6 +645,8 @@ InternalRecord* InternalRecord::parse(const vector<Attribute> &recordDescriptor,
 
 	memcpy(internalCursor, &versionId, sizeof(int));
 	internalCursor += sizeof(int);
+	memcpy(internalCursor, &isPointedByForwarder, sizeof(int));
+	internalCursor += sizeof(int);
 	int numberOfNullBytes = getNumberOfNullBytes(recordDescriptor);
 	memcpy(internalCursor, cursor, numberOfNullBytes);
 	internalCursor += numberOfNullBytes;
@@ -648,7 +655,8 @@ InternalRecord* InternalRecord::parse(const vector<Attribute> &recordDescriptor,
 
 //	Data start from here
 	int numberOfAttributes = recordDescriptor.size();
-	unsigned short insertionOffset = (unsigned short)numberOfNullBytes + (unsigned short)sizeof(unsigned short)*(numberOfAttributes+1) + (unsigned short)sizeof(int);
+	unsigned short insertionOffset = (unsigned short)numberOfNullBytes + (unsigned short)sizeof(unsigned short)*(numberOfAttributes+1) +
+			(unsigned short)sizeof(int) + (unsigned short)sizeof(int);
 
 	for(int i=0; i<numberOfAttributes; i++){
 		Attribute attr = recordDescriptor[i];
@@ -675,11 +683,12 @@ InternalRecord* InternalRecord::parse(const vector<Attribute> &recordDescriptor,
 	memcpy(internalCursor + numberOfAttributes*sizeof(unsigned short), &insertionOffset, sizeof(unsigned short));
 
 	record->data = internalData;
+	freeIfNotNull(nullBits);
 	return record;
 }
 
 
-RC InternalRecord::unParse(const vector<Attribute> &recordDescriptor, void* data, int &versionId) {
+RC InternalRecord::unParse(const vector<Attribute> &recordDescriptor, void* data, int &versionId, int &isPointedByForwarder) {
 	int numberOfNullBytes = getNumberOfNullBytes(recordDescriptor);
 	char * startInternalCursor = (char *) this->data;
 	char * internalCursor = (char*)this->data;
@@ -687,6 +696,8 @@ RC InternalRecord::unParse(const vector<Attribute> &recordDescriptor, void* data
 
 	vector<int> lengthOfAttributes;
 	 memcpy(&versionId, internalCursor, sizeof(int));
+	 internalCursor += sizeof(int);
+	 memcpy(&isPointedByForwarder, internalCursor, sizeof(int));
 	 internalCursor += sizeof(int);
 
 	 memcpy(cursor, internalCursor, numberOfNullBytes);
@@ -698,7 +709,6 @@ RC InternalRecord::unParse(const vector<Attribute> &recordDescriptor, void* data
 		unsigned short startOffset = *(unsigned short*)(internalCursor+i*(sizeof(unsigned short)));
 		unsigned short endOffSet = *(unsigned short *)(internalCursor+((i+1)*(sizeof(unsigned short))));
 		int length = endOffSet - startOffset;
-//		cout << i << "-" << length <<endl;
 		lengthOfAttributes.push_back(length);
 	}
 
@@ -722,6 +732,7 @@ RC InternalRecord::unParse(const vector<Attribute> &recordDescriptor, void* data
 		cursor += length;
 		}
 	}
+	freeIfNotNull (nullBits);
 	return 0;
 }
 
@@ -732,6 +743,7 @@ RC InternalRecord::getAttributeByIndex(const int &index, const vector<Attribute>
 	char * startCursor = (char *)this->data;
 	int numberOfNullBytes = getNumberOfNullBytes(recordDescriptor);
 	bool* nullBits = getNullBits(recordDescriptor, this->data);
+	cursor += sizeof(int);
 	cursor += sizeof(int);
 	cursor += numberOfNullBytes;
 	unsigned short offsetFromStart = *(unsigned short*)(cursor + sizeof(unsigned short)*index);
@@ -744,12 +756,25 @@ RC InternalRecord::getAttributeByIndex(const int &index, const vector<Attribute>
 	}
 	memcpy(attributeCursor, startCursor + offsetFromStart, numberOfBytes);
 	isNull = *(nullBits+index);
+	freeIfNotNull(nullBits);
 	return 0;
 }
 
 RC InternalRecord::getVersionId(int &versionId) {
 	memcpy(&versionId, this->data, sizeof(int));
 	return 0;
+}
+
+bool InternalRecord::isPointedByForwarder() {
+	if(this->data == 0) {
+		return false;
+	}
+	char* cursor = (char*)this->data;
+//	skipping version details
+	cursor += sizeof(int);
+	unsigned isPointed = 0;
+	memcpy(&isPointed, cursor, sizeof(unsigned));
+	return isPointed == 1;
 }
 
 RecordForwarder::RecordForwarder(RID rid) {
@@ -759,11 +784,14 @@ RecordForwarder::RecordForwarder(RID rid) {
 
 }
 
-
 RecordForwarder::RecordForwarder(){
 	this->pageNum =-1;
 	this->slotNum = -1;
 	this->data = 0;
+}
+
+RecordForwarder::~RecordForwarder() {
+	freeIfNotNull(this->data);
 }
 
 int RecordForwarder::getInternalRecordBytes(const vector<Attribute> &recordDescriptor,const void * data,bool isForwarderFlag) {
@@ -774,7 +802,7 @@ int RecordForwarder::getInternalRecordBytes(const vector<Attribute> &recordDescr
 	return bytes;
 }
 
-RecordForwarder* RecordForwarder::parse(const vector<Attribute> &recordDescriptor, const void* data, RID rid,bool isForwarderFlag, const int &versionId) {
+RecordForwarder* RecordForwarder::parse(const vector<Attribute> &recordDescriptor, const void* data, RID rid,bool isForwarderFlag, const int &versionId, const int &isPointedByForwarder) {
 	RecordForwarder *recordForwarder = new RecordForwarder(rid);
 	int internalDataSize = recordForwarder->getInternalRecordBytes(recordDescriptor, data, isForwarderFlag);
 	void * recordForwarderData = malloc(internalDataSize);
@@ -784,24 +812,29 @@ RecordForwarder* RecordForwarder::parse(const vector<Attribute> &recordDescripto
 		recordForwarder->slotNum = -1;
 		int forwarder = 0; // Data
 		recordForwarder->setForwarderValues(forwarder, recordForwarder->pageNum,recordForwarder->slotNum, rid);
-		InternalRecord *internalRecord = InternalRecord::parse(recordDescriptor, data, versionId);
+		InternalRecord *internalRecord = InternalRecord::parse(recordDescriptor, data, versionId, isPointedByForwarder);
 		memcpy(((char*) recordForwarder->data) + FORWARDER_SIZE,internalRecord->data, internalDataSize - FORWARDER_SIZE);
+		delete internalRecord;
+
 	}
 	else{
 		int forwarder = 1;
 		recordForwarder->setForwarderValues(forwarder, recordForwarder->pageNum,recordForwarder->slotNum, rid);
+
 	}
 	return recordForwarder;
 }
 
-RC RecordForwarder::unparse(const vector<Attribute> &recordDescriptor,void* data, int &versionId) {
+RC RecordForwarder::unparse(const vector<Attribute> &recordDescriptor,void* data, int &versionId, int &isPointedByForwarder) {
 	int forwarder = 0;
 	int pageNum, slotNum;
 	this->getForwarderValues(forwarder, pageNum, slotNum);
 	if (forwarder == 0) {
 		InternalRecord *internalRecord = new InternalRecord();
 		internalRecord->data = ((char*)this->data)+FORWARDER_SIZE;
-		internalRecord->unParse(recordDescriptor,data, versionId);
+		internalRecord->unParse(recordDescriptor,data, versionId, isPointedByForwarder);
+		internalRecord->data = 0;
+		delete internalRecord;
 	}
 	else {
 		this->pageNum = pageNum;
@@ -812,7 +845,7 @@ RC RecordForwarder::unparse(const vector<Attribute> &recordDescriptor,void* data
 
 InternalRecord* RecordForwarder::getInternalRecData() {
 	int pageNum, slotNum, forwarder=-1;
-	InternalRecord *internalRecord;
+	InternalRecord *internalRecord=0;
 	this->getForwarderValues(forwarder, pageNum, slotNum);
 	if (forwarder == 0) {
 		internalRecord = new InternalRecord();
@@ -828,6 +861,17 @@ bool RecordForwarder::isDataForwarder(int &pageNum, int &slotNum){
 		return false;
 	}
 	return true;
+}
+
+bool RecordForwarder::isPointedByForwarder() {
+	InternalRecord* ir = this->getInternalRecData();
+	if(ir == 0) {
+		return false;
+	}
+	bool isPointed = ir->isPointedByForwarder();
+	ir->data = 0;
+	delete ir;
+	return isPointed;
 }
 
 void RecordForwarder::setForwarderValues(int &forwarder, int &pageNum, int &slotNum, RID rid){
