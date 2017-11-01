@@ -16,14 +16,14 @@ Record Format :-
       XXXX                                  XX
     XXX                                      XXX
 +--XX----+----------+--------+------------+---------+-----------+
-|        |          |        |  _   _     |         |         +-------------->    Fields stroring actual data
+|        |          |        |  _   _     |         |         +-------------->    Fields storing actual data
 |   20   |     46   |        |            |  field 1| field2    |
 +--------+-----+-X--+--------+------------+---------------------+
                | XX                                     XX
                |  XXXXXXXXXXXXXX XXXXXXXXXXXXXXXXXXXX XXX
                |
                v
-             n+1 elemenets to store offsets
+             n+1 elements to store offsets
 
 
 

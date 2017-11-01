@@ -16,7 +16,7 @@ RC RM_TEST_EXTRA_2(const string &tableName, const int nameLength, const string &
     Attribute attr;
     attr.name = "SSN";
     attr.type = TypeInt;
-    attr.length = 9;
+    attr.length = 4;
     RC rc = rm->addAttribute(tableName, attr);
     assert(rc == success && "RelationManager::addAttribute() should not fail.");
     
@@ -72,13 +72,6 @@ int main()
     RC rcmain = rm->deleteTable("tbl_employee200");
 
     rcmain = createTable("tbl_employee200");
-
-    string tableName = "Tables";
-      rm->printTable(tableName);
-
-      cout << endl;
-      tableName = "Columns";
-      rm->printTable(tableName);
 
     // Add Attributes
     rcmain = RM_TEST_EXTRA_2("tbl_employee200", 7, name2, 22, 180, 6000, 123479765);

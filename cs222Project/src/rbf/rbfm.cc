@@ -126,8 +126,7 @@ RC RecordBasedFileManager::internalReadRecord(FileHandle &fileHandle, const vect
 	int isPointedByForwarder = 0;
 	recordForwarder->unparse(recordDescriptor, data, versionId, isPointedByForwarder);
 	if (recordForwarder->pageNum == -1) {
-		pageData=0;
-		//freeIfNotNull(recordForwarder->data);
+		freeIfNotNull(pageData);
 		delete recordForwarder;
 		return 0;
 	} else {
@@ -136,8 +135,7 @@ RC RecordBasedFileManager::internalReadRecord(FileHandle &fileHandle, const vect
 		redirectRID.slotNum = recordForwarder->slotNum;
 		RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
 		rbfm->internalReadRecord(fileHandle, recordDescriptor, redirectRID, data, versionId);
-		pageData=0;
-		//freeIfNotNull(recordForwarder->data);
+		freeIfNotNull(pageData);
 		delete recordForwarder;
 	}
 	return 0;

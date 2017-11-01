@@ -709,7 +709,6 @@ RC InternalRecord::unParse(const vector<Attribute> &recordDescriptor, void* data
 		unsigned short startOffset = *(unsigned short*)(internalCursor+i*(sizeof(unsigned short)));
 		unsigned short endOffSet = *(unsigned short *)(internalCursor+((i+1)*(sizeof(unsigned short))));
 		int length = endOffSet - startOffset;
-//		cout << i << "-" << length <<endl;
 		lengthOfAttributes.push_back(length);
 	}
 
