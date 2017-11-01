@@ -61,8 +61,22 @@ RC RecordBasedFileManager::internalInsertRecord(FileHandle &fileHandle, const ve
 		return -1;
 	}
 	int numberOfPages = fileHandle.getNumberOfPages();
+	int lastPage = numberOfPages-1;
 
-	for(int i=numberOfPages-1; i>=0 ; i--) {
+//	try inserting at last page
+	if(lastPage >= 0) {
+			Page* page = fileHandle.file->getPageByIndex(lastPage);
+			if(page->insertRecord(recordDescriptor, data, rid, versionId, isPointedByForwarder) == 0) {
+				rid.pageNum = lastPage;
+				fileHandle.writePage(lastPage, page->data);
+				delete page;
+				return 0;
+			}
+			delete page;
+	}
+
+// else try inserting from beginning
+	for(int i=0; i<lastPage ; i++) {
 		Page* page = fileHandle.file->getPageByIndex(i);
 		if(page->insertRecord(recordDescriptor, data, rid, versionId, isPointedByForwarder) == 0) {
 			rid.pageNum = i;
@@ -72,6 +86,8 @@ RC RecordBasedFileManager::internalInsertRecord(FileHandle &fileHandle, const ve
 		}
 		delete page;
 	}
+
+//	otherwise append a new Page
 
 	Page* pg = new Page();
 	if(pg->insertRecord(recordDescriptor, data, rid, versionId, isPointedByForwarder) == 0) {

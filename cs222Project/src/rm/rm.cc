@@ -553,7 +553,7 @@ RC RelationManager::getAttributesVector(const string &tableName, vector<vector<A
 		}
 	int rc;
 	RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
-	unordered_map<int, vector<Attribute>> versionToRecordDescriptorMap;
+	map<int, map<int, Attribute>> versionToRecordDescriptorMap;
 		RID rid;
 		FileHandle fileHandle;
 		int tableIdInt, versionId;
@@ -585,18 +585,24 @@ RC RelationManager::getAttributesVector(const string &tableName, vector<vector<A
 			ccr->data = 0;
 			delete ccr;
 			if(versionToRecordDescriptorMap.find(readVersionId) == versionToRecordDescriptorMap.end()) {
-				vector<Attribute> recordDescriptor;
-				recordDescriptor.push_back(readAttribute);
+				map<int, Attribute> recordDescriptor;
+				recordDescriptor[columnIndex] = readAttribute;
 				versionToRecordDescriptorMap[readVersionId] = recordDescriptor;
 			} else {
-				versionToRecordDescriptorMap[readVersionId].push_back(readAttribute);
+				versionToRecordDescriptorMap[readVersionId][columnIndex] = readAttribute;
 			}
 		}
 		free(columnsCatalogRecord);
 
-		map<int, vector<Attribute>> ordered(versionToRecordDescriptorMap.begin(), versionToRecordDescriptorMap.end());
-		for(auto it = ordered.begin(); it != ordered.end(); ++it)
-		     recordDescriptors.push_back(it->second);
+		for(auto it = versionToRecordDescriptorMap.begin(); it != versionToRecordDescriptorMap.end(); ++it)
+		{
+			vector<Attribute> recordDescriptor;
+			map<int, Attribute>columnOffsetToAttributeMap = it->second;
+			for(auto it2=columnOffsetToAttributeMap.begin(); it2 != columnOffsetToAttributeMap.end(); ++it2) {
+				recordDescriptor.push_back(it2->second);
+			}
+			recordDescriptors.push_back(recordDescriptor);
+		}
 		delete iterator;
 		this->tableNameToRecordDescriptorsMap[tableName] = recordDescriptors;
 	    return 0;
