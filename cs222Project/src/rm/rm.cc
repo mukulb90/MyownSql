@@ -518,6 +518,7 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
 
 	rbfm->scan(fileHandle, columnsCatalogAttrs, "table-id", EQ_OP, &tableIdInt  , colmnsCatalogAttrsNames, *iterator);
 	void* columnsCatalogRecord = malloc(2000);
+	map<int, Attribute> columnIndexToAttributeMap;
 	while(iterator->getNextRecord(rid, columnsCatalogRecord) != -1) {
 		ColumnsCatalogRecord* ccr = new ColumnsCatalogRecord(columnsCatalogRecord);
 //		rbfm->printRecord(columnsCatalogAttrs, columnsCatalogRecord);
@@ -527,11 +528,17 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
 		int readVersion;
 		ccr->unParse(readTableId, readAttribute, columnIndex, readVersion);
 		if(versionId == readVersion) {
-			attrs.push_back(readAttribute);
+			columnIndexToAttributeMap[columnIndex] = readAttribute;
 		}
 		ccr->data = 0;
 		delete ccr;
 	}
+
+	for (auto iter = columnIndexToAttributeMap.begin(); iter != columnIndexToAttributeMap.end(); iter++)
+	{
+	    attrs.push_back(iter->second);
+	}
+
 	freeIfNotNull(columnsCatalogRecord);
 	this->tableNameToRecordDescriptorMap[tableName] = attrs;
 	//free(columnsCatalogRecord);
