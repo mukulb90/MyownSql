@@ -134,7 +134,7 @@ public:
 	~LeafNode();
 
 //	This method will try to insert the key in Leaf node, if not possible it will return -1
-	RC insert(const void* value);
+	RC insert(const void* value, const RID &rid);
 	RC setSibling(const int &pageNum);
 	RC getSibling(int &pageNum);
 
@@ -149,7 +149,7 @@ public:
 
 	RC getNumberOfChildNodes(int &numberOfNodes);
 	RC search(const void * key, Node* nextNode);
-	RC insertKey(void* key);
+	RC insertKey(const void* key, const int &leftChild, const int &rightChild);
 };
 
 class Graph {
