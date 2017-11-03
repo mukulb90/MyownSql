@@ -234,10 +234,5 @@ public:
 };
 
 void freeIfNotNull(void * data);
-//{
-//	if(data!=0){
-//		free(data);
-//		data = 0 ;
-//	}
-//}
+int compare(const void* to, const void* from, const Attribute &attr, bool isNullBitsInTo, bool isNullBitsInFrom);
 #endif

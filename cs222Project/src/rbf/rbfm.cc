@@ -1,5 +1,4 @@
 #include "rbfm.h"
-
 #include <math.h>
 #include <stdlib.h>
 #include <bitset>
@@ -246,16 +245,17 @@ RC RecordBasedFileManager::scan(FileHandle &fileHandle,
 }
 
 
-int compare(const void* to, const void* from, const Attribute &attr) {
+int compare(const void* to, const void* from, const Attribute &attr, bool isNullBitsInTo, bool isNullBitsInFrom) {
 	char * fromCursor = (char*) from;
 	char * toCursor = (char*) to;
-//	unsigned char toNullByte = *toCursor;
-//	unsigned char fromNullByte = *fromCursor;
-//	if(toNullByte == 128 && fromNullByte == 128){
-//		return 0;
-//	}
-//	fromCursor +=1;
-	toCursor +=1;
+
+	if(isNullBitsInTo) {
+		toCursor +=1;
+	}
+
+	if(isNullBitsInFrom) {
+		fromCursor += 1;
+	}
 
 	if (attr.type == TypeInt) {
 		int fromValue = *((int*) fromCursor);
@@ -266,9 +266,7 @@ int compare(const void* to, const void* from, const Attribute &attr) {
 		float toValue = *((float*) toCursor);
 		return fromValue - toValue;
 	} else {
-//		int fromLength = *((int*)fromCursor);
 		int toLength = *((int*)toCursor);
-//		fromCursor += sizeof(int);
 		toCursor += sizeof(int);
 		string fromString = string(fromCursor);
 		string toString = string(toCursor, toLength);
@@ -363,7 +361,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 				switch (this->compOp) {
 								case EQ_OP: {
 									if (compare(compAttrValue, this->value,
-											this->conditionAttribute) == 0) {
+											this->conditionAttribute, true, false) == 0) {
 										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
 										returnedRid.pageNum = rid.pageNum;
 										returnedRid.slotNum = rid.slotNum;
@@ -374,7 +372,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 								}
 								case LE_OP: {
 									if (compare(compAttrValue, this->value,
-											this->conditionAttribute) >= 0) {
+											this->conditionAttribute, true, false) >= 0) {
 										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
 										returnedRid.pageNum = rid.pageNum;
 										returnedRid.slotNum = rid.slotNum;
@@ -385,7 +383,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 								}
 								case LT_OP: {
 									if (compare(compAttrValue, this->value,
-											this->conditionAttribute) > 0) {
+											this->conditionAttribute, true, false) > 0) {
 										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
 										returnedRid.pageNum = rid.pageNum;
 										returnedRid.slotNum = rid.slotNum;
@@ -396,7 +394,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 								}
 								case GT_OP: {
 									if (compare(compAttrValue, this->value,
-											this->conditionAttribute) < 0) {
+											this->conditionAttribute, true, false) < 0) {
 										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
 										returnedRid.pageNum = rid.pageNum;
 										returnedRid.slotNum = rid.slotNum;
@@ -407,7 +405,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 								}
 								case GE_OP: {
 									if (compare(compAttrValue, this->value,
-											this->conditionAttribute) <= 0) {
+											this->conditionAttribute, true, false) <= 0) {
 										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
 										returnedRid.pageNum = rid.pageNum;
 										returnedRid.slotNum = rid.slotNum;
@@ -418,7 +416,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 								}
 								case NE_OP: {
 									if (compare(compAttrValue, this->value,
-											this->conditionAttribute) != 0) {
+											this->conditionAttribute, true, false) != 0) {
 										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
 										returnedRid.pageNum = rid.pageNum;
 										returnedRid.slotNum = rid.slotNum;
