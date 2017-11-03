@@ -307,3 +307,13 @@ RC AuxiloryNode::search(const void * key, Node* nextNode) {
 RC Node::getMetaDataSize() {
 	return sizeof(int)*3;
 }
+
+
+RC LeafNode::insert(const void* value) {
+	return 0;
+}
+
+LeafNode::LeafNode(Attribute const &attr, FileHandle const& fileHandle):Node(this->id, attr, fileHandle) {
+	this->id = fileHandle.file->numberOfPages;
+	cout << this->id;
+}
