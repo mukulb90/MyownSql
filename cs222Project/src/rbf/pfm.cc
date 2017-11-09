@@ -105,7 +105,7 @@ RC FileHandle::readPage(PageNum pageNum, void *data) {
 }
 
 RC FileHandle::internalReadPage(PageNum pageNum, void *data, bool shouldAffectCounters) {
-	if(pageNum >= this->file->numberOfPages) {
+	if(this->file == 0 || pageNum >= this->file->numberOfPages) {
 		return -1;
 	}
 
@@ -901,6 +901,14 @@ void RecordForwarder::getForwarderValues(int &forwarder,int &pageNum, int &slotN
 
 VarcharParser::VarcharParser(){
 	this->data = 0;
+}
+
+VarcharParser::VarcharParser(void * data){
+	this->data = data;
+}
+
+VarcharParser::~VarcharParser() {
+	freeIfNotNull(this->data);
 }
 
 VarcharParser* VarcharParser::parse(const string &str) {

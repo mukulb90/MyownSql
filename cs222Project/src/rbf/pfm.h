@@ -224,9 +224,11 @@ bool* getNullBits(const vector<Attribute> &recordDescriptor, const void* data);
 
 class VarcharParser {
 private:
-	VarcharParser();
 public:
 	void* data;
+
+	VarcharParser();
+	VarcharParser(void*);
 	~VarcharParser();
 
 	static VarcharParser* parse(const string &str);
