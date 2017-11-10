@@ -126,11 +126,12 @@ class LeafEntry: public Entry {
 public:
 
 	LeafEntry(void* data, Attribute &attr);
-	static LeafEntry* parse(Attribute &attr, void* key, const int &pageNum,const int &slotNum);
-	static int getSize(Attribute &attr, void* key);
-	RC unparse(Attribute &attr, void* key, int &pageNum, int &slotNum);
 	void* getKey();
 	int getEntrySize();
+
+	static LeafEntry* parse(Attribute &attr,const void* key, const int &pageNum,const int &slotNum);
+	static int getSize(Attribute &attr,const void* key);
+	RC unparse(Attribute &attr, void* key, int &pageNum, int &slotNum);
 };
 
 
@@ -138,8 +139,13 @@ class AuxiloryEntry: public Entry {
 
 public:
 	AuxiloryEntry(void* data, Attribute &attr);
+
 	void* getKey();
 	int getEntrySize();
+
+	static AuxiloryEntry* parse(Attribute &attr,const void* key, const int &leftPointer,const int &rightPointer);
+	static int getSize(Attribute &attr, void* key);
+	RC unparse(Attribute &attr, void* key, int &leftPointer, int &rightPointer);
 
 };
 
@@ -214,7 +220,6 @@ public:
 
 	RC getNumberOfChildNodes(int &numberOfNodes);
 	RC search(const void * key, Node*& nextNode);
-	RC insertKey(const void* key, const int &leftChild, const int &rightChild);
 };
 
 class Graph {
