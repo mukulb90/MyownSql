@@ -109,19 +109,68 @@ public:
 
 };
 
-class Node {
+
+
+class Entry {
 public:
+	void* data;
+	Attribute attr;
+
+	virtual void* getKey() = 0;
+	virtual int getEntrySize() = 0;
+};
+
+
+class LeafEntry: public Entry {
+
+public:
+
+	LeafEntry(void* data, Attribute &attr);
+	static LeafEntry* parse(Attribute &attr, void* key, const int &pageNum,const int &slotNum);
+	static int getSize(Attribute &attr, void* key);
+	RC unparse(Attribute &attr, void* key, int &pageNum, int &slotNum);
+	void* getKey();
+	int getEntrySize();
+};
+
+
+class AuxiloryEntry: public Entry {
+
+public:
+	AuxiloryEntry(void* data, Attribute &attr);
+	void* getKey();
+	int getEntrySize();
+
+};
+
+class Node {
+
+public:
+
 	int id;
 	void* data;
 	Attribute attr;
 	FileHandle fileHandle;
 
+//	This constructor is used to create a new Node
+	Node(const Attribute &attr, const FileHandle &fileHandle);
+
+//	This constructor is used to create a node if nodeId is known
 	Node(const int &id, const Attribute &attr, const FileHandle &fileHandle);
+
+
+//	This constructor is used to create a new node if id is known but not type
 	Node(const int &id, const FileHandle &fileHandle);
 
+	RC insertEntry(Entry* entry);
+
+//	This method splits the Node into two splits and equally distributes the entries between both nodes
 	Node* split();
 
+// 	save the node on file system
 	RC serialize();
+
+//	read the node from file system
 	RC deserialize();
 
 //	3 things which would be present in every node, lets call it node metadata
@@ -145,7 +194,7 @@ public:
 	~LeafNode();
 
 //	This method will try to insert the key in Leaf node, if not possible it will return -1
-	RC insert(const void* value, const RID &rid);
+//	RC insert(const void* value, const RID &rid);
 	RC setSibling(const int &pageNum);
 	RC getSibling(int &pageNum);
 
@@ -160,6 +209,7 @@ public:
 	AuxiloryNode(const int &id, const Attribute &attr,
 			const FileHandle &fileHandle);
 	AuxiloryNode(const int &id, const FileHandle &fileHandle);
+
 	~AuxiloryNode();
 
 	RC getNumberOfChildNodes(int &numberOfNodes);
@@ -187,31 +237,6 @@ public:
 	RC serialize();
 	RC deserialize();
 	RC insertEntry(const void *key, const RID &rid);
-};
-
-
-class Entry {
-public:
-	void* data;
-
-	void* getKey();
-	int getEntrySize();
-};
-
-
-class LeafEntry: public Entry {
-
-public:
-
-	LeafEntry(void* data);
-	static LeafEntry* parse(Attribute &attr, void* key, const int &pageNum,const int &slotNum);
-	static int getSize(Attribute &attr, void* key, int &pageNum, int &slotNum);
-	RC unparse(Attribute &attr, void* key, int &pageNum, int &slotNum);
-};
-
-class AuxiloryEntry: public Entry {
-public:
-	AuxiloryEntry(void* data);
 };
 
 #endif

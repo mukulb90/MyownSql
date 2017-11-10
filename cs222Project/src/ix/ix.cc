@@ -275,14 +275,15 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 	stack<Node*> visitedNodes;
 	visitedNodes.push(this->root);
 	node->getNodeType(nodeType);
+	LeafEntry* entry = LeafEntry::parse(this->attr, (void*)key, rid.pageNum, rid.slotNum);
+
 
 	int numberOfKeys;
 	node->getNumberOfKeys(numberOfKeys);
 	if (numberOfKeys == 0) {
 //		Initialize graph with one root and one leaf Node
 		LeafNode* leafNode = new LeafNode(this->attr, this->fileHandle);
-		cout << leafNode->id << endl;
-		leafNode->insert(key, rid);
+		leafNode->insertEntry(entry);
 		leafNode->serialize();
 		root->insertKey(key, leafNode->id, INVALID_POINTER);
 		root->serialize();
@@ -299,7 +300,7 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 
 //	try inserting
 	LeafNode* leafNode = (LeafNode*) node;
-	if (leafNode != 0 && leafNode->insert(key, rid) != -1) {
+	if (leafNode != 0 && leafNode->insertEntry(entry) != -1) {
 //		new key could fit nicely in existing thing, so do not need to do anything else
 		leafNode->serialize();
 		return 0;
@@ -415,22 +416,22 @@ Node* Node::split() {
 		splitNode = new LeafNode(this->attr, this->fileHandle);
 	}
 
-//	for(int i=0; i<numberOfKeys; i++) {
-//		if(nodeType == AUXILORY || nodeType == ROOT){
-//			entry = new AuxiloryEntry(cursor);
-//		} else {
-//			entry = new LeafEntry(cursor);
-//		}
-//
-//		if(i>numberOfKeys/2) {
-//			numberOfKeysInSplitNode++;
-////			splitNode->append(entry);
-//		} else {
-//			newFreeSpaceInCurrentNode += entry->getEntrySize();
-//		}
-//
-//		cursor += entry->getEntrySize();
-//	}
+	for(int i=0; i<numberOfKeys; i++) {
+		if(nodeType == AUXILORY || nodeType == ROOT){
+			entry = new AuxiloryEntry(cursor, this->attr);
+		} else {
+			entry = new LeafEntry(cursor, this->attr);
+		}
+
+		if(i>numberOfKeys/2) {
+			numberOfKeysInSplitNode++;
+//			splitNode->append(entry);
+		} else {
+			newFreeSpaceInCurrentNode += entry->getEntrySize();
+		}
+
+		cursor += entry->getEntrySize();
+	}
 	if(nodeType == LEAF) {
 		LeafNode* leafNode = (LeafNode*)this;
 		LeafNode* splitLeafNode = (LeafNode*)splitNode;
@@ -531,50 +532,91 @@ RC Node::getMetaDataSize() {
 	return sizeof(int) * 4;
 }
 
-RC LeafNode::insert(const void* value, const RID &rid) {
+RC Node::insertEntry(Entry* entry) {
 	int numberOfKeys, freeSpace, spaceRequiredByLeafEntry;
-	char* cursor = (char*) this->data;
-	int startOffset = 0;
-	this->getNumberOfKeys(numberOfKeys);
-	this->getFreeSpace(freeSpace);
-	int pageNum = rid.pageNum;
-	int slotNum = rid.slotNum;
-	spaceRequiredByLeafEntry = LeafEntry::getSize(this->attr,(void*) value, pageNum, slotNum);
-	if(spaceRequiredByLeafEntry > freeSpace) {
-//		Not enough Space in the Leaf Node
-		return -1;
-	}
+		char* cursor = (char*) this->data;
+		int startOffset = 0;
+		this->getNumberOfKeys(numberOfKeys);
+		this->getFreeSpace(freeSpace);
 
-	cursor += this->getMetaDataSize();
-	startOffset += this->getMetaDataSize();
-	Attribute attr;
-	int entryPageNum, entrySlotnum;
-//	Find correct position to insert such that Leaf Entries are sorted
-	for(int i=0; i<numberOfKeys; i++) {
-		LeafEntry* entry = new LeafEntry(cursor);
-		void* keyData = malloc(PAGE_SIZE);
-		entry->unparse(attr, keyData, entryPageNum, entrySlotnum);
-		int entrySize = LeafEntry::getSize(this->attr, cursor, entryPageNum, entrySlotnum);
-		if(compare(keyData, value, this->attr, false, false) < 0){
-			//			make space for new entry
-			int shiftSize  = PAGE_SIZE - startOffset - spaceRequiredByLeafEntry;
-			memcpy(cursor + spaceRequiredByLeafEntry, cursor, shiftSize);
-			free(keyData);
-			break;
-		} else {
-
-			cursor += entrySize;
-			startOffset += entrySize;
+		spaceRequiredByLeafEntry = entry->getEntrySize();
+		if(spaceRequiredByLeafEntry > freeSpace) {
+	//		Not enough Space in the Leaf Node
+			return -1;
 		}
-		free(keyData);
-	}
 
-	LeafEntry* leafEntry = LeafEntry::parse(this->attr,(void*) value, pageNum, slotNum);
-	memcpy(cursor, leafEntry->data, spaceRequiredByLeafEntry);
-	this->setNumberOfKeys(numberOfKeys + 1);
-	this->setFreeSpace(freeSpace - spaceRequiredByLeafEntry);
-	return 0;
+		cursor += this->getMetaDataSize();
+		startOffset += this->getMetaDataSize();
+		Attribute attr;
+		int entryPageNum, entrySlotnum;
+	//	Find correct position to insert such that Leaf Entries are sorted
+		for(int i=0; i<numberOfKeys; i++) {
+			void* keyData = malloc(PAGE_SIZE);
+			int entrySize = entry->getEntrySize();
+			if(compare(keyData, entry->getKey(), this->attr, false, false) < 0){
+				//			make space for new entry
+				int shiftSize  = PAGE_SIZE - startOffset - spaceRequiredByLeafEntry;
+				memcpy(cursor + spaceRequiredByLeafEntry, cursor, shiftSize);
+				free(keyData);
+				break;
+			} else {
+
+				cursor += entrySize;
+				startOffset += entrySize;
+			}
+			free(keyData);
+		}
+
+		memcpy(cursor, entry->data, spaceRequiredByLeafEntry);
+		this->setNumberOfKeys(numberOfKeys + 1);
+		this->setFreeSpace(freeSpace - spaceRequiredByLeafEntry);
+		return 0;
 }
+
+//RC LeafNode::insert(const void* value, const RID &rid) {
+//	int numberOfKeys, freeSpace, spaceRequiredByLeafEntry;
+//	char* cursor = (char*) this->data;
+//	int startOffset = 0;
+//	this->getNumberOfKeys(numberOfKeys);
+//	this->getFreeSpace(freeSpace);
+//	int pageNum = rid.pageNum;
+//	int slotNum = rid.slotNum;
+//	spaceRequiredByLeafEntry = LeafEntry::getSize(this->attr,(void*) value, pageNum, slotNum);
+//	if(spaceRequiredByLeafEntry > freeSpace) {
+////		Not enough Space in the Leaf Node
+//		return -1;
+//	}
+//
+//	cursor += this->getMetaDataSize();
+//	startOffset += this->getMetaDataSize();
+//	Attribute attr;
+//	int entryPageNum, entrySlotnum;
+////	Find correct position to insert such that Leaf Entries are sorted
+//	for(int i=0; i<numberOfKeys; i++) {
+//		LeafEntry* entry = new LeafEntry(cursor);
+//		void* keyData = malloc(PAGE_SIZE);
+//		entry->unparse(attr, keyData, entryPageNum, entrySlotnum);
+//		int entrySize = LeafEntry::getSize(this->attr, cursor, entryPageNum, entrySlotnum);
+//		if(compare(keyData, value, this->attr, false, false) < 0){
+//			//			make space for new entry
+//			int shiftSize  = PAGE_SIZE - startOffset - spaceRequiredByLeafEntry;
+//			memcpy(cursor + spaceRequiredByLeafEntry, cursor, shiftSize);
+//			free(keyData);
+//			break;
+//		} else {
+//
+//			cursor += entrySize;
+//			startOffset += entrySize;
+//		}
+//		free(keyData);
+//	}
+//
+//	LeafEntry* leafEntry = LeafEntry::parse(this->attr,(void*) value, pageNum, slotNum);
+//	memcpy(cursor, leafEntry->data, spaceRequiredByLeafEntry);
+//	this->setNumberOfKeys(numberOfKeys + 1);
+//	this->setFreeSpace(freeSpace - spaceRequiredByLeafEntry);
+//	return 0;
+//}
 
 LeafNode::LeafNode(Attribute const &attr, FileHandle const& fileHandle) :
 		Node(fileHandle.file->numberOfPages, attr, fileHandle) {
@@ -597,8 +639,17 @@ RC LeafNode::getSibling(int& pageNum) {
 	return 0;
 }
 
-LeafEntry::LeafEntry(void* data) {
+LeafEntry::LeafEntry(void* data, Attribute &attribute) {
 	this->data = data;
+	this->attr = attribute;
+}
+
+int LeafEntry::getEntrySize(){
+	return LeafEntry::getSize(this->attr, this->getKey());
+}
+
+void* LeafEntry::getKey() {
+	return this->data;
 }
 
 RC LeafEntry::unparse(Attribute &attr, void* key, int& pageNum,int& slotNum){
@@ -641,8 +692,8 @@ RC LeafEntry::unparse(Attribute &attr, void* key, int& pageNum,int& slotNum){
 }
 
 LeafEntry* LeafEntry::parse(Attribute &attr, void* key, const int &pageNum,const int &slotNum) {
-	void* leafEntryData = malloc(LeafEntry::getSize(attr, key, (int &)pageNum, (int&)slotNum));
-	LeafEntry* leafEntry = new LeafEntry(leafEntryData);
+	void* leafEntryData = malloc(LeafEntry::getSize(attr, key));
+	LeafEntry* leafEntry = new LeafEntry(leafEntryData, attr);
 	char * cursor = (char *) leafEntry->data;
 	if(attr.type == TypeInt) {
 		memcpy(cursor, key, sizeof(int));
@@ -679,7 +730,7 @@ LeafEntry* LeafEntry::parse(Attribute &attr, void* key, const int &pageNum,const
 	return 0;
 }
 
-	int LeafEntry::getSize(Attribute &attr, void* key, int &pageNum, int &slotNum) {
+	int LeafEntry::getSize(Attribute &attr, void* key) {
 		int size = 0;
 		if(attr.type == TypeInt || attr.type == TypeReal) {
 			size += sizeof(int);
@@ -694,3 +745,21 @@ LeafEntry* LeafEntry::parse(Attribute &attr, void* key, const int &pageNum,const
 		size += sizeof(int)*2;
 		return size;
 	}
+
+
+	AuxiloryEntry::AuxiloryEntry(void* data, Attribute & attr) {
+		this->data = data;
+		this->attr = attr;
+	}
+
+
+	void* AuxiloryEntry::getKey() {
+		cout << "Not implemenetd";
+	}
+
+	int AuxiloryEntry::getEntrySize() {
+		cout << "Bot implemenetd";
+	}
+
+
+
