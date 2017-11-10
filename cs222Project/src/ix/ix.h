@@ -119,6 +119,8 @@ public:
 	Node(const int &id, const Attribute &attr, const FileHandle &fileHandle);
 	Node(const int &id, const FileHandle &fileHandle);
 
+	Node* split();
+
 	RC serialize();
 	RC deserialize();
 
@@ -139,8 +141,6 @@ public:
 class LeafNode: public Node {
 
 public:
-	LeafNode(const int &id, const Attribute &attr,
-			const FileHandle &fileHandle);
 	LeafNode(const Attribute &attr, const FileHandle &fileHandle);
 	~LeafNode();
 
@@ -154,6 +154,9 @@ public:
 class AuxiloryNode: public Node {
 
 public:
+	AuxiloryNode(const Attribute &attr,
+				const FileHandle &fileHandle);
+
 	AuxiloryNode(const int &id, const Attribute &attr,
 			const FileHandle &fileHandle);
 	AuxiloryNode(const int &id, const FileHandle &fileHandle);
@@ -187,15 +190,28 @@ public:
 };
 
 
-class LeafEntry {
-
+class Entry {
 public:
 	void* data;
+
+	void* getKey();
+	int getEntrySize();
+};
+
+
+class LeafEntry: public Entry {
+
+public:
 
 	LeafEntry(void* data);
 	static LeafEntry* parse(Attribute &attr, void* key, const int &pageNum,const int &slotNum);
 	static int getSize(Attribute &attr, void* key, int &pageNum, int &slotNum);
 	RC unparse(Attribute &attr, void* key, int &pageNum, int &slotNum);
+};
+
+class AuxiloryEntry: public Entry {
+public:
+	AuxiloryEntry(void* data);
 };
 
 #endif
