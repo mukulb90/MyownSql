@@ -145,7 +145,10 @@ public:
 	RC unparse(Attribute &attr, void* key, int &pageNum, int &slotNum);
 	Entry* getNextEntry();
 	string toJson();
-
+	void setPageNum(int &pageNum);
+	void setSlotNum(int &slotNum);
+	int getPageNum();
+	int getSlotNum();
 };
 
 
@@ -163,6 +166,10 @@ public:
 	RC unparse(Attribute &attr, void* key, int &leftPointer, int &rightPointer);
 	string toJson();
 
+	void setLeftPointer(int &leftPointer);
+	void setRightPointer(int &rightPointer);
+	int getLeftPointer();
+	int getRightPointer();
 };
 
 class Node {
@@ -215,7 +222,7 @@ class LeafNode: public Node {
 
 public:
 	LeafNode(const Attribute &attr, const FileHandle &fileHandle);
-	LeafNode(const int id, const Attribute &attr, const FileHandle &fileHandle);
+	LeafNode(const int &id, const Attribute &attr, const FileHandle &fileHandle);
 	~LeafNode();
 
 //	This method will try to insert the key in Leaf node, if not possible it will return -1
@@ -239,7 +246,7 @@ public:
 	~AuxiloryNode();
 
 	RC getNumberOfChildNodes(int &numberOfNodes);
-	RC search(const void * key, Node*& nextNode);
+	Entry* search(const void * key, Node* &nextNode);
 	string toJson();
 };
 
