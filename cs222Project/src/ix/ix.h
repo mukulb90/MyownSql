@@ -121,10 +121,14 @@ public:
 
 	friend bool operator <(Entry& entry, Entry& entry2);
 	friend bool operator <=(Entry& entry, Entry& entry2);
+
 	friend bool operator >(Entry &entry, Entry &entry2);
 
 	friend bool operator >=(Entry& entry, Entry& entry2);
 	friend bool operator ==(Entry& entry, Entry& entry2);
+	virtual Entry* getNextEntry() = 0;
+	virtual string toJson() = 0;
+
 };
 
 
@@ -139,6 +143,9 @@ public:
 	static LeafEntry* parse(Attribute &attr,const void* key, const int &pageNum,const int &slotNum);
 	static int getSize(Attribute &attr,const void* key);
 	RC unparse(Attribute &attr, void* key, int &pageNum, int &slotNum);
+	Entry* getNextEntry();
+	string toJson();
+
 };
 
 
@@ -149,11 +156,13 @@ public:
 
 	void* getKey();
 	int getEntrySize();
-	AuxiloryEntry* getNextEntry();
+	Entry* getNextEntry();
 
 	static AuxiloryEntry* parse(Attribute &attr,const void* key, const int &leftPointer,const int &rightPointer);
 	static int getSize(Attribute &attr, void* key);
 	RC unparse(Attribute &attr, void* key, int &leftPointer, int &rightPointer);
+	string toJson();
+
 };
 
 class Node {
@@ -197,6 +206,8 @@ public:
 	RC getFreeSpace(int &freeSapce);
 
 	int getMetaDataSize();
+//	virtual string toJson() = 0;
+
 
 };
 
@@ -204,12 +215,14 @@ class LeafNode: public Node {
 
 public:
 	LeafNode(const Attribute &attr, const FileHandle &fileHandle);
+	LeafNode(const int id, const Attribute &attr, const FileHandle &fileHandle);
 	~LeafNode();
 
 //	This method will try to insert the key in Leaf node, if not possible it will return -1
 //	RC insert(const void* value, const RID &rid);
 	RC setSibling(const int &pageNum);
 	RC getSibling(int &pageNum);
+	string toJson();
 
 };
 
@@ -227,6 +240,7 @@ public:
 
 	RC getNumberOfChildNodes(int &numberOfNodes);
 	RC search(const void * key, Node*& nextNode);
+	string toJson();
 };
 
 class Graph {

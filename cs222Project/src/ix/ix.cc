@@ -1,5 +1,14 @@
 #include "ix.h"
+
+#include <stdlib.h>
+#include <__tree>
+#include <cstring>
+#include <iostream>
+#include <set>
 #include <stack>
+#include <utility>
+
+#include "../rbf/pfm.h"
 
 #define INVALID_POINTER -1
 
@@ -120,7 +129,14 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle, const Attribute &attribute,
 
 void IndexManager::printBtree(IXFileHandle &ixfileHandle,
 		const Attribute &attribute) const {
+	FileHandle fileHandle = *(ixfileHandle.fileHandle);
+	Graph *graph = new Graph(fileHandle, attribute);
+	int rc = graph->deserialize();
+	Node* node = graph->root;
+	cout << ((AuxiloryNode*) node)->toJson();
+
 }
+
 
 IX_ScanIterator::IX_ScanIterator() {
 }
@@ -315,6 +331,10 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 	return -1;
 }
 
+//RC Graph::insertManualEntry(const void * key, RID const& rid) {
+//
+//	}
+
 AuxiloryNode::AuxiloryNode(const Attribute &attr,
 		const FileHandle &fileHandle) :
 		Node(fileHandle.file->numberOfPages, attr, fileHandle) {
@@ -428,7 +448,6 @@ Node* Node::split() {
 
 		if(i>numberOfKeys/2) {
 			numberOfKeysInSplitNode++;
-//			splitNode->append(entry);
 		} else {
 			newFreeSpaceInCurrentNode += entry->getEntrySize();
 		}
@@ -470,6 +489,7 @@ RC Node::setFreeSpace(const int &freeSpace) {
 	return 0;
 }
 
+
 RC AuxiloryNode::search(const void * key, Node*& nextNode) {
 	char* cursor = (char*) this->data;
 	cursor += this->getMetaDataSize();
@@ -494,7 +514,7 @@ RC AuxiloryNode::search(const void * key, Node*& nextNode) {
 				break;
 			}
 		}
-		firstEntry = firstEntry->getNextEntry();
+		firstEntry = (AuxiloryEntry*)firstEntry->getNextEntry();
 	}
 	freeIfNotNull(tempKey);
 	if(nextPointer == INVALID_POINTER) {
@@ -503,6 +523,56 @@ RC AuxiloryNode::search(const void * key, Node*& nextNode) {
 	nextNode = new AuxiloryNode(nextPointer, this->attr, this->fileHandle);
 	nextNode->deserialize();
 	return 0;
+}
+
+string AuxiloryNode::toJson(){
+
+	void* tempdata = malloc(this->attr.length);
+	int leftPointer, rightPointer;
+	string jsonString = "{";
+	jsonString += "\"keys\":[\"";
+	char* cursor = (char*) this->data;
+	cursor = cursor + this->getMetaDataSize();
+	AuxiloryEntry *entry = new AuxiloryEntry(cursor, this->attr);
+	int numberOfKeys;
+	this->getNumberOfKeys(numberOfKeys);
+	set<int> children;
+	for (int i = 0; i < numberOfKeys; i++) {
+		jsonString += entry->toJson();
+		entry->unparse(this->attr, tempdata, leftPointer, rightPointer);
+		entry = (AuxiloryEntry*) entry->getNextEntry();
+		children.insert(leftPointer);
+		children.insert(rightPointer);
+
+	}
+	jsonString += "\"],";
+	jsonString += "\"children\":[";
+	int count = 0;
+	int size = children.size();
+	for (std::set<int>::iterator it = children.begin(); it != children.end();
+			++it) {
+		int id = *it;
+		Node *childNode = new Node(id, this->attr, this->fileHandle);
+		childNode->deserialize();
+		NodeType nodeType;
+		childNode->getNodeType(nodeType);
+		if (nodeType == LEAF) {
+			jsonString += ((LeafNode*) childNode)->toJson();
+		} else {
+			jsonString += ((AuxiloryNode*) childNode)->toJson();
+		}
+
+		if (count != size - 1) {
+			jsonString += ",";
+
+		}
+		count++;
+
+	}
+	jsonString += "]}";
+	free(tempdata);
+	return jsonString;
+
 }
 
 RC Node::getMetaDataSize() {
@@ -557,6 +627,12 @@ LeafNode::LeafNode(Attribute const &attr, FileHandle const& fileHandle) :
 	this->setSibling(-1);
 }
 
+LeafNode::LeafNode(const int id, Attribute const &attr, FileHandle const& fileHandle) :
+		Node(id, attr, fileHandle) {
+	this->setNodeType(LEAF);
+	this->setSibling(-1);
+}
+
 RC LeafNode::setSibling(const int& pageNum) {
 	char* cursor = (char*)this->data;
 	cursor += 3*sizeof(int);
@@ -569,6 +645,24 @@ RC LeafNode::getSibling(int& pageNum) {
 	cursor += 3*sizeof(int);
 	memcpy(&pageNum, cursor, sizeof(int));
 	return 0;
+}
+
+string LeafNode::toJson(){
+	string jsonString = "";
+	jsonString = "{\"keys\":[";
+	char* cursor = (char*) this->data;
+	cursor = cursor + this->getMetaDataSize();
+	int numberOfKeys;
+	this->getNumberOfKeys(numberOfKeys);
+	Entry *entry = new LeafEntry(cursor,this->attr);
+	for (int i = 0; i < numberOfKeys; i++) {
+		jsonString += entry->toJson();
+		i != numberOfKeys -1 ? jsonString += " , " : "";
+		entry = entry->getNextEntry();
+	}
+	jsonString+="]}";
+	return jsonString;
+
 }
 
 bool operator <(Entry& entry, Entry& entry2) {
@@ -600,6 +694,30 @@ int LeafEntry::getEntrySize(){
 
 void* LeafEntry::getKey() {
 	return this->data;
+}
+
+string LeafEntry::toJson(){
+	void* key = malloc(this->attr.length);
+	int slotNum, pageNum;
+	string json= "";
+	json+="\"";
+	this->unparse(this->attr,key,pageNum,slotNum);
+	string keyString="";
+	if (attr.type == TypeInt || attr.type == TypeReal) {
+		 keyString = to_string(*((int*) key));
+
+	} else if (attr.type == TypeReal) {
+		 keyString = to_string(*((float*) key));
+	} else if (attr.type == TypeVarChar) {
+		VarcharParser* varchar = new VarcharParser(this->getKey());
+		varchar->unParse(keyString);
+		varchar->data = 0;
+	}
+	keyString = to_string(*((int*)key));
+	json+=keyString + ":";
+	json+="("+to_string(pageNum)+","+to_string(slotNum)+")";
+	json+="\"";
+	return json;
 }
 
 RC LeafEntry::unparse(Attribute &attr, void* key, int& pageNum,int& slotNum){
@@ -696,6 +814,11 @@ LeafEntry* LeafEntry::parse(Attribute &attr, const void* key, const int &pageNum
 		return size;
 	}
 
+		Entry* LeafEntry::getNextEntry() {
+			char* cursor = (char*)this->data;
+			return (Entry*)new LeafEntry(cursor + this->getEntrySize(), this->attr);
+		}
+
 
 	AuxiloryEntry::AuxiloryEntry(void* data, Attribute & attr) {
 		this->data = data;
@@ -725,9 +848,27 @@ LeafEntry* LeafEntry::parse(Attribute &attr, const void* key, const int &pageNum
 		return entry->unparse(attr, key, leftPointer, rightPointer);
 	}
 
-	AuxiloryEntry* AuxiloryEntry::getNextEntry() {
+	Entry* AuxiloryEntry::getNextEntry() {
 		char* cursor = (char*)this->data;
-		return new AuxiloryEntry(cursor + this->getEntrySize() - sizeof(int), this->attr);
+		return (Entry*) new AuxiloryEntry(cursor + this->getEntrySize() - sizeof(int), this->attr);
 	}
+
+	string AuxiloryEntry::toJson(){
+		string jsonString = "";
+		string keyString="";
+		if (attr.type == TypeInt || attr.type == TypeReal) {
+				 keyString = to_string(*((int*) this->getKey()));
+
+			} else if (attr.type == TypeReal) {
+				 keyString = to_string(*((float*) this->getKey()));
+			} else if (attr.type == TypeVarChar) {
+				VarcharParser* varchar = new VarcharParser(this->getKey());
+				varchar->unParse(keyString);
+				varchar->data = 0;
+			}
+		jsonString = keyString;
+		return jsonString;
+	}
+
 
 

@@ -76,7 +76,6 @@ int testCase_2(const string &indexFileName, const Attribute &attribute)
     // close index file
     rc = indexManager->closeFile(ixfileHandle);
     assert(rc == success && "indexManager::closeFile() should not fail.");
-
     return success;
 }
 
