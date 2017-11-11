@@ -118,6 +118,13 @@ public:
 
 	virtual void* getKey() = 0;
 	virtual int getEntrySize() = 0;
+
+	friend bool operator <(Entry& entry, Entry& entry2);
+	friend bool operator <=(Entry& entry, Entry& entry2);
+	friend bool operator >(Entry &entry, Entry &entry2);
+
+	friend bool operator >=(Entry& entry, Entry& entry2);
+	friend bool operator ==(Entry& entry, Entry& entry2);
 };
 
 
@@ -142,11 +149,11 @@ public:
 
 	void* getKey();
 	int getEntrySize();
+	AuxiloryEntry* getNextEntry();
 
 	static AuxiloryEntry* parse(Attribute &attr,const void* key, const int &leftPointer,const int &rightPointer);
 	static int getSize(Attribute &attr, void* key);
 	RC unparse(Attribute &attr, void* key, int &leftPointer, int &rightPointer);
-
 };
 
 class Node {

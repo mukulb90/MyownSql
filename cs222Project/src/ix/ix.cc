@@ -473,64 +473,36 @@ RC Node::setFreeSpace(const int &freeSpace) {
 RC AuxiloryNode::search(const void * key, Node*& nextNode) {
 	char* cursor = (char*) this->data;
 	cursor += this->getMetaDataSize();
-	char * tempCursor;
-	int numberOfKeys;
+	void* tempKey = malloc(this->attr.length);
+	int numberOfKeys, nextPointer = INVALID_POINTER, leftPointer, rightPointer;
 	this->getNumberOfKeys(numberOfKeys);
-	if (this->attr.type == TypeReal || this->attr.type == TypeInt) {
-		for (int i = 0; i < numberOfKeys; i++) {
-			AuxiloryEntry *firstEntry = new AuxiloryEntry( cursor, this->attr);
-
-			int nextPointer;
-			int leftSubtreePointer = *((int*) cursor);
-			cursor += sizeof(int);
-
-			const void * firstKey = cursor;
-			cursor += sizeof(int);
-
-			int midSubtreePointer = *((int*) cursor);
-			tempCursor = cursor;
-			cursor += sizeof(int);
-
-			const void * secondKey = cursor;
-			cursor += sizeof(int);
-
-			int rightSubtreePointer = *((int*) cursor);
-			cursor += sizeof(int);
-
-			if (key != NULL && firstKey != NULL && secondKey != NULL) {
-				if (i == 0
-						&& compare(key, firstKey, this->attr, false, false)
-								>= 0) {
-					nextPointer = leftSubtreePointer;
-				} else if (i == numberOfKeys - 1
-						&& compare(key, secondKey, this->attr, false, false)
-								< 0) {
-					nextPointer = rightSubtreePointer;
-				}
-
-				else if (compare(key, firstKey, this->attr, false, false) <= 0
-						&& compare(key, secondKey, this->attr, false, false)
-								> 0) {
-					nextPointer = midSubtreePointer;
-				} else {
-					cursor = tempCursor;
-					continue;
-				}
-			} else {
-				if(key == NULL ) {
-					nextPointer = leftSubtreePointer || midSubtreePointer || rightSubtreePointer;
-				}
-			}
-			Node* node = new Node(nextPointer, this->attr, this->fileHandle);
-			node->deserialize();
-			nextNode = node;
-			return 0;
-		}
-	} else {
-		//#TODO need to implement for varchar
-
+	if(numberOfKeys == 0) {
+		return -1;
 	}
-    return -1;
+	Entry* searchEntry = new AuxiloryEntry((void*)key, this->attr);
+	AuxiloryEntry* firstEntry = new AuxiloryEntry(cursor, this->attr);
+
+	for(int i=0; i<numberOfKeys; i++) {
+		firstEntry->unparse(this->attr, tempKey, leftPointer, rightPointer);
+		if(*searchEntry < *(Entry*)firstEntry && leftPointer != INVALID_POINTER){
+			nextPointer = leftPointer;
+			break;
+		}
+		if(i == numberOfKeys - 1) {
+			if(*searchEntry > *((Entry*)firstEntry) && rightPointer != INVALID_POINTER) {
+				nextPointer = rightPointer;
+				break;
+			}
+		}
+		firstEntry = firstEntry->getNextEntry();
+	}
+	freeIfNotNull(tempKey);
+	if(nextPointer == INVALID_POINTER) {
+		return -1;
+	}
+	nextNode = new AuxiloryNode(nextPointer, this->attr, this->fileHandle);
+	nextNode->deserialize();
+	return 0;
 }
 
 RC Node::getMetaDataSize() {
@@ -553,8 +525,8 @@ RC Node::insertEntry(Entry* entry) {
 		cursor += this->getMetaDataSize();
 		startOffset += this->getMetaDataSize();
 		Attribute attr;
-		int entryPageNum, entrySlotnum;
-	//	Find correct position to insert such that Leaf Entries are sorted
+
+		//	Find correct position to insert such that Leaf Entries are sorted
 		for(int i=0; i<numberOfKeys; i++) {
 			void* keyData = malloc(PAGE_SIZE);
 			int entrySize = entry->getEntrySize();
@@ -597,6 +569,24 @@ RC LeafNode::getSibling(int& pageNum) {
 	cursor += 3*sizeof(int);
 	memcpy(&pageNum, cursor, sizeof(int));
 	return 0;
+}
+
+bool operator <(Entry& entry, Entry& entry2) {
+	return compare(entry2.getKey(), entry.getKey(), entry.attr, false, false) > 0;
+}
+
+bool operator <=(Entry& entry, Entry& entry2) {
+	return compare(entry2.getKey(), entry.getKey(), entry.attr, false, false) >= 0;
+}
+bool operator >(Entry & entry, Entry & entry2) {
+	return compare(entry2.getKey(), entry.getKey(), entry.attr, false, false) < 0;
+}
+
+bool operator >=(Entry & entry, Entry & entry2) {
+	return compare(entry2.getKey(), entry.getKey(), entry.attr, false, false) <= 0;
+}
+bool operator ==(Entry & entry, Entry & entry2) {
+	return compare(entry2.getKey(), entry.getKey(), entry.attr, false, false) == 0;
 }
 
 LeafEntry::LeafEntry(void* data, Attribute &attribute) {
@@ -735,5 +725,9 @@ LeafEntry* LeafEntry::parse(Attribute &attr, const void* key, const int &pageNum
 		return entry->unparse(attr, key, leftPointer, rightPointer);
 	}
 
+	AuxiloryEntry* AuxiloryEntry::getNextEntry() {
+		char* cursor = (char*)this->data;
+		return new AuxiloryEntry(cursor + this->getEntrySize() - sizeof(int), this->attr);
+	}
 
 
