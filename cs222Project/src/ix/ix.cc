@@ -3,9 +3,9 @@
 #include <stdlib.h>
 #include <cstring>
 #include <iostream>
-#include <set>
 #include <stack>
 #include <utility>
+#include <unordered_set>
 
 #include "../rbf/pfm.h"
 
@@ -348,6 +348,8 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 //			#TODO update pointer Here.. really important .. DO NOT Forget THIS
 			parentAuxiloryEntry->setLeftPointer(leafNode->id);
 			leafNode->setSibling(parentAuxiloryEntry->getRightPointer());
+			Node* node = visitedNodes.top();
+			node->serialize();
 
 		}
 		leafNode->serialize();
@@ -567,20 +569,28 @@ string AuxiloryNode::toJson(){
 	AuxiloryEntry *entry = new AuxiloryEntry(cursor, this->attr);
 	int numberOfKeys;
 	this->getNumberOfKeys(numberOfKeys);
-	set<int> children;
+	unordered_set<int> unique_children;
+
+	vector<int> children;
 	for (int i = 0; i < numberOfKeys; i++) {
 		jsonString += entry->toJson();
 		entry->unparse(this->attr, tempdata, leftPointer, rightPointer);
 		entry = (AuxiloryEntry*) entry->getNextEntry();
-		children.insert(leftPointer);
-		children.insert(rightPointer);
+		if(unique_children.find(leftPointer) == unique_children.end()){
+			children.push_back(leftPointer);
+			unique_children.insert(leftPointer);
+		}
+		if(unique_children.find(rightPointer) == unique_children.end()){
+			children.push_back(rightPointer);
+			unique_children.insert(rightPointer);
+		}
 
 	}
 	jsonString += "\"],";
 	jsonString += "\"children\":[";
 	int count = 0;
 	int size = children.size();
-	for (std::set<int>::iterator it = children.begin(); it != children.end();
+	for (vector<int>::iterator it = children.begin(); it != children.end();
 			++it) {
 		int id = *it;
 		Node *childNode = new Node(id, this->attr, this->fileHandle);
@@ -611,14 +621,14 @@ RC Node::getMetaDataSize() {
 }
 
 RC Node::insertEntry(Entry* entry) {
-	int numberOfKeys, freeSpace, spaceRequiredByLeafEntry;
+	int numberOfKeys, freeSpace, spaceRequiredByEntry;
 		char* cursor = (char*) this->data;
 		int startOffset = 0;
 		this->getNumberOfKeys(numberOfKeys);
 		this->getFreeSpace(freeSpace);
 
-		spaceRequiredByLeafEntry = entry->getEntrySize();
-		if(spaceRequiredByLeafEntry > freeSpace) {
+		spaceRequiredByEntry = entry->getEntrySize();
+		if(spaceRequiredByEntry > freeSpace) {
 	//		Not enough Space in the Leaf Node
 			return -1;
 		}
@@ -629,7 +639,7 @@ RC Node::insertEntry(Entry* entry) {
 		Entry* nodeEntry;
 
 
-		//	Find correct position to insert such that Leaf Entries are sorted
+		//	Find correct position to insert such that Entries are sorted
 		for(int i=0; i<numberOfKeys; i++) {
 			NodeType nodeType;
 			this->getNodeType(nodeType);
@@ -640,21 +650,26 @@ RC Node::insertEntry(Entry* entry) {
 			}
 			int nodeEntrySize = nodeEntry->getEntrySize();
 
-			if(*nodeEntry < *entry){
+			if(*nodeEntry > *entry){
 				//			make space for new entry
-				int shiftSize  = PAGE_SIZE - startOffset - spaceRequiredByLeafEntry;
-				memcpy(cursor + spaceRequiredByLeafEntry, cursor, shiftSize);
-				break;
+				int shiftSize  = PAGE_SIZE - startOffset - spaceRequiredByEntry;
+				void* buffer = malloc(shiftSize);
+				memcpy(buffer, cursor, shiftSize);
+				memcpy(cursor, entry->data, spaceRequiredByEntry);
+				cursor += spaceRequiredByEntry;
+				memcpy(cursor, buffer, shiftSize);
+				this->setNumberOfKeys(numberOfKeys + 1);
+				this->setFreeSpace(freeSpace - spaceRequiredByEntry);
+				free(buffer);
+				return 0;
 			} else {
-
 				cursor += nodeEntrySize;
 				startOffset += nodeEntrySize;
 			}
 		}
-
-		memcpy(cursor, entry->data, spaceRequiredByLeafEntry);
+		memcpy(cursor, entry->data, spaceRequiredByEntry);
 		this->setNumberOfKeys(numberOfKeys + 1);
-		this->setFreeSpace(freeSpace - spaceRequiredByLeafEntry);
+		this->setFreeSpace(freeSpace - spaceRequiredByEntry);
 		return 0;
 }
 

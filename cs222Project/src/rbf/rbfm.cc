@@ -256,6 +256,18 @@ int compare(const void* to, const void* from, const Attribute &attr, bool isNull
 		fromCursor += 1;
 	}
 
+	if(from == NULL && to == NULL) {
+		return 0;
+	}
+
+	if(from == NULL) {
+		return -1;
+	}
+
+	if(to == NULL) {
+		return +1;
+	}
+
 	if (attr.type == TypeInt) {
 		int fromValue = *((int*) fromCursor);
 		int toValue = *((int*) toCursor);
