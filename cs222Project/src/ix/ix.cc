@@ -105,9 +105,12 @@ RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle,
 		return rc;
 	}
 	rc = graph->deleteKey(key);
+	if (rc == 0) {
+		ixfileHandle.ixWritePageCounter++;
+	}
 	graph->serialize();
 
-	return -1;
+	return rc;
 }
 
 RC IndexManager::scan(IXFileHandle &ixfileHandle, const Attribute &attribute,
@@ -393,37 +396,37 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 	return -1;
 }
 
-//<<<<<<< Updated upstream
-//RC LeafNode::deleteEntry(Entry * deleteEntry){
-//=======
-//RC Graph::deleteKey(const void * key){
-//	NodeType nodeType;
-//	Node* node = this->root;
-//	Entry* parentEntry = 0;
-//	node->getNodeType(nodeType);
-//	int freeSpace = 0;
-//	int numberOfKey = 0;
-//
-//	while (nodeType != LEAF) {
-//		AuxiloryNode* auxiloryNode = (AuxiloryNode*) node;
-//		parentEntry = auxiloryNode->search(key, node);
-//		if (node == NULL) {
-//			cout << "Entry could not be found"<< endl;
-//			break;
-//		}
-//		node->getNodeType(nodeType);
-//		cout << "Key entry :: "<< *((int*)key)<<endl;
-//		LeafEntry *deleteEntry = new LeafEntry((void*)key,this->attr);
-//		node->deleteEntry(deleteEntry);
-//		node->serialize();
-//	}
-//}
 
-RC Node::deleteEntry(Entry * deleteEntry){
+RC Graph::deleteKey(const void * key) {
+	int rc = 0;
+	NodeType nodeType;
+	Node* node = this->root;
+	Entry* parentEntry = 0;
+	node->getNodeType(nodeType);
 
+	while (nodeType != LEAF) {
+		AuxiloryNode* auxiloryNode = (AuxiloryNode*) node;
+		parentEntry = auxiloryNode->search(key, node);
+		if (node == NULL) {
+			cout << "Entry could not be found" << endl;
+			rc = -1;
+		}
+		node->getNodeType(nodeType);
+		LeafEntry *deleteEntry = new LeafEntry((void*) key, this->attr);
+		rc = ((LeafNode*) node)->deleteEntry(deleteEntry);
+		(LeafNode*) node->serialize();
+		return rc;
+	}
+}
+
+RC LeafNode::deleteEntry(Entry * deleteEntry) {
+	int rc = 0;
 	int numberOfKeys = 0;
-	int freeSpace =0;
+	int freeSpace = 0;
 	this->getNumberOfKeys(numberOfKeys);
+	if (numberOfKeys < 1) {
+		rc = -1;
+	}
 	char* cursor = (char*) this->data;
 	cursor = cursor + this->getMetaDataSize();
 	Entry *entry = new LeafEntry(cursor, this->attr);
@@ -433,14 +436,14 @@ RC Node::deleteEntry(Entry * deleteEntry){
 		if (*entry == *deleteEntry) {
 			entry = entry->getNextEntry();
 			for (int j = i; j < numberOfKeys; j++) {
-				memcpy((char*) entry->data - deleteEntry->getEntrySize(), entry->data,
-						entry->getEntrySize());
+				memcpy((char*) entry->data - deleteEntry->getEntrySize(),
+						entry->data, entry->getEntrySize());
 				entry = entry->getNextEntry();
 			}
 			flag = 1;
 			this->getFreeSpace(freeSpace);
-			this->setFreeSpace(freeSpace-deleteEntry->getEntrySize());
-			this->setNumberOfKeys(numberOfKeys-1);
+			this->setFreeSpace(freeSpace - deleteEntry->getEntrySize());
+			this->setNumberOfKeys(numberOfKeys - 1);
 		}
 		entry = entry->getNextEntry();
 		if (flag == 1) {
@@ -448,7 +451,7 @@ RC Node::deleteEntry(Entry * deleteEntry){
 		}
 	}
 
-	return 0;
+	return rc;
 }
 
 AuxiloryNode::AuxiloryNode(const Attribute &attr, const FileHandle &fileHandle) :

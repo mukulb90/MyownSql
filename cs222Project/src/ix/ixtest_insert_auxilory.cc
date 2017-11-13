@@ -44,6 +44,8 @@ int main(int argc, char **argv) {
 	assert(diff == 0 && "Auxilory entry1 not inserted at correct position");
 
 	cout << "Insertion test successful" << endl;
+
+
 	return 0;
 
 }

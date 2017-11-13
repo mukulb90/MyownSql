@@ -228,7 +228,7 @@ public:
 
 	//	This method splits the Node into two splits and equally distributes the entries between both nodes
 	RC split(Node* firstNode, AuxiloryEntry* &entryPointingToBothNodes);
-	RC deleteEntry(Entry* entry);
+	//RC deleteEntry(Entry* entry);
 	RC setLeftSibling(const unsigned short &pageNum);
 	RC getLeftSibling(unsigned short &pageNum);
 	RC setRightSibling(const unsigned short &pageNum);
@@ -236,6 +236,7 @@ public:
 	RC addAfter(LeafNode *node);
 	RC addBefore(LeafNode* node);
 	string toJson();
+	RC deleteEntry(Entry * deleteEntry);
 
 };
 
