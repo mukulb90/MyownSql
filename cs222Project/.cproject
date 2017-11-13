@@ -120,7 +120,14 @@
 	</storageModule>
 	<storageModule moduleId="scannerConfiguration">
 		<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+<<<<<<< Updated upstream
 		<scannerConfigBuildInfo instanceId="cdt.managedbuild.config.gnu.macosx.exe.debug.874670115;cdt.managedbuild.config.gnu.macosx.exe.debug.874670115.;cdt.managedbuild.tool.gnu.c.compiler.base.1671236169;cdt.managedbuild.tool.gnu.c.compiler.input.193180504">
+=======
+		<scannerConfigBuildInfo instanceId="cdt.managedbuild.config.gnu.macosx.exe.debug.874670115;cdt.managedbuild.config.gnu.macosx.exe.debug.874670115.;cdt.managedbuild.tool.gnu.c.compiler.macosx.base.833272818;cdt.managedbuild.tool.gnu.c.compiler.input.1325929257">
+			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+		</scannerConfigBuildInfo>
+		<scannerConfigBuildInfo instanceId="cdt.managedbuild.config.gnu.macosx.exe.debug.874670115;cdt.managedbuild.config.gnu.macosx.exe.debug.874670115.;cdt.managedbuild.tool.gnu.cpp.compiler.macosx.base.645544258;cdt.managedbuild.tool.gnu.cpp.compiler.input.1916955329">
+>>>>>>> Stashed changes
 			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
 		</scannerConfigBuildInfo>
 		<scannerConfigBuildInfo instanceId="cdt.managedbuild.config.gnu.macosx.exe.debug.874670115;cdt.managedbuild.config.gnu.macosx.exe.debug.874670115.;cdt.managedbuild.tool.gnu.cpp.compiler.macosx.exe.debug.393913709;cdt.managedbuild.tool.gnu.cpp.compiler.input.1209346435">
@@ -135,8 +142,11 @@
 		<scannerConfigBuildInfo instanceId="cdt.managedbuild.config.macosx.exe.release.968747503;cdt.managedbuild.config.macosx.exe.release.968747503.;cdt.managedbuild.tool.gnu.c.compiler.macosx.exe.release.402208334;cdt.managedbuild.tool.gnu.c.compiler.input.164092827">
 			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
 		</scannerConfigBuildInfo>
+<<<<<<< Updated upstream
 		<scannerConfigBuildInfo instanceId="cdt.managedbuild.config.gnu.macosx.exe.debug.874670115;cdt.managedbuild.config.gnu.macosx.exe.debug.874670115.;cdt.managedbuild.tool.gnu.cpp.compiler.base.2130155484;cdt.managedbuild.tool.gnu.cpp.compiler.input.536135218">
 			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
 		</scannerConfigBuildInfo>
+=======
+>>>>>>> Stashed changes
 	</storageModule>
 </cproject>

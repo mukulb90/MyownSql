@@ -278,6 +278,7 @@ public:
 	RC serialize();
 	RC deserialize();
 	RC insertEntry(const void *key, const RID &rid);
+	RC deleteKey(const void *key);
 };
 
 #endif

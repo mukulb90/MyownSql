@@ -93,18 +93,19 @@ RC IndexManager::insertEntry(IXFileHandle &ixfileHandle,
 
 RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle,
 		const Attribute &attribute, const void *key, const RID &rid) {
-		int rc = 0;
-		FileHandle fileHandle = *(ixfileHandle.fileHandle);
-		if (fileHandle.file == 0) {
-			return -1;
-		}
+	int rc = 0;
+	FileHandle fileHandle = *(ixfileHandle.fileHandle);
+	if (fileHandle.file == 0) {
+		return -1;
+	}
 
-		Graph* graph = new Graph(fileHandle, attribute);
-		rc = graph->deserialize();
-		if (rc != 0) {
-			return rc;
-		}
-//		rc = graph->deleteEntry(key);
+	Graph* graph = new Graph(fileHandle, attribute);
+	rc = graph->deserialize();
+	if (rc != 0) {
+		return rc;
+	}
+	rc = graph->deleteKey(key);
+	graph->serialize();
 
 	return -1;
 }
@@ -392,9 +393,36 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 	return -1;
 }
 
-RC LeafNode::deleteEntry(Entry * deleteEntry){
+//<<<<<<< Updated upstream
+//RC LeafNode::deleteEntry(Entry * deleteEntry){
+//=======
+//RC Graph::deleteKey(const void * key){
+//	NodeType nodeType;
+//	Node* node = this->root;
+//	Entry* parentEntry = 0;
+//	node->getNodeType(nodeType);
+//	int freeSpace = 0;
+//	int numberOfKey = 0;
+//
+//	while (nodeType != LEAF) {
+//		AuxiloryNode* auxiloryNode = (AuxiloryNode*) node;
+//		parentEntry = auxiloryNode->search(key, node);
+//		if (node == NULL) {
+//			cout << "Entry could not be found"<< endl;
+//			break;
+//		}
+//		node->getNodeType(nodeType);
+//		cout << "Key entry :: "<< *((int*)key)<<endl;
+//		LeafEntry *deleteEntry = new LeafEntry((void*)key,this->attr);
+//		node->deleteEntry(deleteEntry);
+//		node->serialize();
+//	}
+//}
+
+RC Node::deleteEntry(Entry * deleteEntry){
 
 	int numberOfKeys = 0;
+	int freeSpace =0;
 	this->getNumberOfKeys(numberOfKeys);
 	char* cursor = (char*) this->data;
 	cursor = cursor + this->getMetaDataSize();
@@ -404,18 +432,22 @@ RC LeafNode::deleteEntry(Entry * deleteEntry){
 		int flag = 0;
 		if (*entry == *deleteEntry) {
 			entry = entry->getNextEntry();
-			for (int j = i; i < numberOfKeys; i++) {
-				memcpy((char*) entry->data - entry->getEntrySize(), entry->data,
+			for (int j = i; j < numberOfKeys; j++) {
+				memcpy((char*) entry->data - deleteEntry->getEntrySize(), entry->data,
 						entry->getEntrySize());
 				entry = entry->getNextEntry();
 			}
 			flag = 1;
+			this->getFreeSpace(freeSpace);
+			this->setFreeSpace(freeSpace-deleteEntry->getEntrySize());
+			this->setNumberOfKeys(numberOfKeys-1);
 		}
 		entry = entry->getNextEntry();
 		if (flag == 1) {
 			break;
 		}
 	}
+
 	return 0;
 }
 
@@ -760,6 +792,7 @@ string LeafNode::toJson() {
 	int numberOfKeys;
 	this->getNumberOfKeys(numberOfKeys);
 	Entry *entry = new LeafEntry(cursor, this->attr);
+	cout << "Number of keys in children:: "<< numberOfKeys;
 	for (int i = 0; i < numberOfKeys; i++) {
 		jsonString += entry->toJson();
 		i != numberOfKeys - 1 ? jsonString += " , " : "";
