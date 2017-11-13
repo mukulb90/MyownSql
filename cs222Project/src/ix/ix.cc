@@ -36,6 +36,7 @@ RC IndexManager::createFile(const string &fileName) {
 		pfm->openFile(fileName, fh);
 		Graph* graph = Graph::instance(fh);
 		rc = graph->serialize();
+		delete graph;
 		pfm->closeFile(fh);
 		return rc;
 	}
@@ -81,6 +82,7 @@ RC IndexManager::insertEntry(IXFileHandle &ixfileHandle,
 	Graph* graph = new Graph(fileHandle, attribute);
 	rc = graph->deserialize();
 	if (rc != 0) {
+		delete graph;
 		return rc;
 	}
 
@@ -106,6 +108,7 @@ RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle,
 	}
 	rc = graph->deleteKey(key);
 	graph->serialize();
+	delete graph;
 
 	return -1;
 }
@@ -123,6 +126,7 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle, const Attribute &attribute,
 	Graph* graph = new Graph(*fileHandle, attribute);
 	int rc = graph->deserialize();
 	if (rc == -1) {
+		delete graph;
 		return rc;
 	}
 	Node* node = graph->root;
@@ -137,7 +141,8 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle, const Attribute &attribute,
 	LeafNode* leafNode = (LeafNode*) nextNode;
 	ix_ScanIterator.leafNode = leafNode;
 	ix_ScanIterator.numberOfElementsIterated = 0;
-	ix_ScanIterator.cursor = (char*) leafNode->data;
+	ix_ScanIterator.currentEntry = leafNode->getFirstEntry();
+	delete graph;
 	return 0;
 }
 
@@ -148,13 +153,14 @@ void IndexManager::printBtree(IXFileHandle &ixfileHandle,
 	int rc = graph->deserialize();
 	Node* node = graph->root;
 	cout << ((AuxiloryNode*) node)->toJson();
-
+	delete graph;
 }
 
 IX_ScanIterator::IX_ScanIterator() {
 }
 
 IX_ScanIterator::~IX_ScanIterator() {
+	delete this->leafNode;
 }
 
 void IX_ScanIterator::getRIDAndKey(char* from, RID& rid, void*key) {
@@ -181,53 +187,56 @@ void IX_ScanIterator::getRIDAndKey(char* from, RID& rid, void*key) {
 	} else {
 	}
 	this->ixfileHandle->ixReadPageCounter++;
-	this->cursor = from;
 }
 
 RC IX_ScanIterator::getNextEntry(RID &rid, void *key) {
-	cursor += this->leafNode->getMetaDataSize();
 	int numberOfKeys;
+
 	this->leafNode->getNumberOfKeys(numberOfKeys);
 	while (this->numberOfElementsIterated < numberOfKeys) {
 		if (lowKey == NULL or highKey == NULL) {
 			this->numberOfElementsIterated++;
-			this->getRIDAndKey((char*) this->cursor, rid, key);
+			int pageNum, slotNum;
+			((LeafEntry*)this->currentEntry)->unparse(this->attribute, key, pageNum, slotNum);
+			rid.pageNum = pageNum;
+			rid.slotNum = slotNum;
+			this->currentEntry = this->currentEntry->getNextEntry();
 			return 0;
-		} else if (this->lowKeyInclusive && this->highKeyInclusive) {
-			if (compare(this->lowKey, cursor, this->attribute, false, false)
-					<= 0
-					&& compare(this->highKey, cursor, this->attribute, false,
-							false) >= 0) {
-				this->numberOfElementsIterated++;
-				this->getRIDAndKey((char*) cursor, rid, key);
-				return 0;
-			}
-		} else if (this->lowKeyInclusive && !this->highKeyInclusive) {
-			if (compare(this->lowKey, cursor, this->attribute, false, false)
-					<= 0
-					&& compare(this->highKey, cursor, this->attribute, false,
-							false) > 0) {
-				this->numberOfElementsIterated++;
-				this->getRIDAndKey((char*) cursor, rid, key);
-				return 0;
-			}
-		} else if (!this->lowKeyInclusive && this->highKeyInclusive) {
-			if (compare(this->lowKey, cursor, this->attribute, false, false) < 0
-					&& compare(this->highKey, cursor, this->attribute, false,
-							false) >= 0) {
-				this->numberOfElementsIterated++;
-				this->getRIDAndKey((char*) cursor, rid, key);
-				return 0;
-			} else if (!this->lowKeyInclusive && !this->highKeyInclusive) {
-				if (compare(this->lowKey, cursor, this->attribute, false, false)
-						< 0
-						&& compare(this->highKey, cursor, this->attribute,
-								false, false) > 0) {
-					this->numberOfElementsIterated++;
-					this->getRIDAndKey((char*) cursor, rid, key);
-					return 0;
-				}
-			}
+//		} else if (this->lowKeyInclusive && this->highKeyInclusive) {
+//			if (compare(this->lowKey, cursor, this->attribute, false, false)
+//					<= 0
+//					&& compare(this->highKey, cursor, this->attribute, false,
+//							false) >= 0) {
+//				this->numberOfElementsIterated++;
+//				this->getRIDAndKey((char*) cursor, rid, key);
+//				return 0;
+//			}
+//		} else if (this->lowKeyInclusive && !this->highKeyInclusive) {
+//			if (compare(this->lowKey, cursor, this->attribute, false, false)
+//					<= 0
+//					&& compare(this->highKey, cursor, this->attribute, false,
+//							false) > 0) {
+//				this->numberOfElementsIterated++;
+//				this->getRIDAndKey((char*) cursor, rid, key);
+//				return 0;
+//			}
+//		} else if (!this->lowKeyInclusive && this->highKeyInclusive) {
+//			if (compare(this->lowKey, cursor, this->attribute, false, false) < 0
+//					&& compare(this->highKey, cursor, this->attribute, false,
+//							false) >= 0) {
+//				this->numberOfElementsIterated++;
+//				this->getRIDAndKey((char*) cursor, rid, key);
+//				return 0;
+//			} else if (!this->lowKeyInclusive && !this->highKeyInclusive) {
+//				if (compare(this->lowKey, cursor, this->attribute, false, false)
+//						< 0
+//						&& compare(this->highKey, cursor, this->attribute,
+//								false, false) > 0) {
+//					this->numberOfElementsIterated++;
+//					this->getRIDAndKey((char*) cursor, rid, key);
+//					return 0;
+//				}
+//			}
 		}
 	}
 	return -1;
@@ -293,6 +302,10 @@ Graph::Graph(const FileHandle &fileHandle, const Attribute& attr) {
 	this->root->setNodeType(ROOT);
 }
 
+Graph::~Graph(){
+	delete this->root;
+}
+
 RC Graph::serialize() {
 	return this->root->serialize();
 }
@@ -323,7 +336,7 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 				INVALID_POINTER, leafNode->id);
 		root->insertEntry(entry);
 		root->serialize();
-		return 0;
+		goto cleanup;
 	}
 
 // traverse till leaf node
@@ -346,7 +359,7 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 			if ( node->insertEntry(entry) != -1) {
 		//		new key could fit nicely in existing thing, so do not need to do anything else
 				node->serialize();
-				return 0;
+				goto cleanup;
 			} else {
 				LeafNode* firstNode = new LeafNode(node->attr, node->fileHandle);
 				AuxiloryEntry* entryPointingToBothNodes;
@@ -354,6 +367,7 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 				node->serialize();
 				firstNode->serialize();
 				node = visitedNodes.top();
+				visitedNodes.pop();
 				entry = entryPointingToBothNodes;
 				continue;
 			}
@@ -381,16 +395,34 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 
 			}
 			Node* parent = visitedNodes.top();
+			visitedNodes.pop();
 			parent->serialize();
 
 //			Not needed as node will be saved by addAfter and addBefore
 //			node->serialize();
-			return 0;
+			goto cleanup;
 		}
 	}
 
 // for now , keep inserting in same node
 	return -1;
+
+	cleanup:
+		while(!visitedNodes.size() != 1){
+			Node* top = visitedNodes.top();
+			visitedNodes.pop();
+			NodeType nodeType;
+			top->getNodeType(nodeType);
+			if(nodeType != ROOT)
+				delete top;
+		}
+		while(!visitedEntries.empty()){
+			Entry* top = visitedEntries.top();
+			visitedEntries.pop();
+			delete top;
+		}
+
+		return 0;
 }
 
 //<<<<<<< Updated upstream
@@ -467,25 +499,9 @@ AuxiloryNode::AuxiloryNode(const int &id, const FileHandle & fileHandle) :
 	this->setNodeType(AUXILORY);
 }
 
-//RC AuxiloryNode::insertKey(const void* key, const int &leftChild,
-//		const int &rightChild) {
-//	int numberOfkeys;
-//	this->getNumberOfKeys(numberOfkeys);
-//	this->setNumberOfKeys(numberOfkeys + 1);
-//	char * cursor = (char *) this->data;
-//	cursor += this->getMetaDataSize();
-//
-//	memcpy(cursor, &leftChild, sizeof(int));
-//	cursor += sizeof(int);
-//
-//	memcpy(cursor, key, sizeof(int));
-//	cursor += sizeof(int);
-//
-//	memcpy(cursor, &rightChild, sizeof(int));
-//	cursor += sizeof(int);
-//
-//	return 0;
-//}
+AuxiloryNode::~AuxiloryNode() {
+
+}
 
 Node::Node(const int &id, const Attribute &attr, const FileHandle &fileHandle) {
 	this->attr = attr;
@@ -502,6 +518,10 @@ Node::Node(const int &id, const FileHandle &fileHandle) {
 	this->data = malloc(PAGE_SIZE);
 	memset(this->data, 0, PAGE_SIZE);
 	this->setFreeSpace(PAGE_SIZE - this->getMetaDataSize());
+}
+
+Node::~Node() {
+	freeIfNotNull(this->data);
 }
 
 RC Node::deserialize() {
@@ -659,6 +679,7 @@ RC Node::getMetaDataSize() {
 
 Entry* Node::getFirstEntry() {
 	char* cursor = (char*) this->data;
+	cursor += this->getMetaDataSize();
 	NodeType nodeType;
 	this->getNodeType(nodeType);
 	if(nodeType == LEAF) {
@@ -732,6 +753,10 @@ LeafNode::LeafNode(const int &id, Attribute const &attr,
 	this->setNodeType(LEAF);
 	this->setLeftSibling(-1);
 	this->setRightSibling(-1);
+}
+
+LeafNode::~LeafNode() {
+
 }
 
 RC LeafNode::setLeftSibling(const unsigned short &pageNum) {
@@ -808,7 +833,7 @@ RC LeafNode::addAfter(LeafNode* node) {
 	this->getRightSibling(temp);
 	this->setRightSibling(node->id);
 	node->setRightSibling(temp);
-	if(temp == INVALID_POINTER){
+	if(temp == (unsigned short)INVALID_POINTER){
 		return 0;
 	}
 	LeafNode* thirdNode = new LeafNode(temp, this->attr, this->fileHandle);
@@ -826,7 +851,7 @@ RC LeafNode::addBefore(LeafNode* node) {
 	this->getLeftSibling(temp);
 	this->setLeftSibling(node->id);
 	node->setLeftSibling(temp);
-	if(temp == INVALID_POINTER) {
+	if(temp == (unsigned short)INVALID_POINTER) {
 		return 0;
 	}
 	LeafNode* previousNode = new LeafNode(temp, this->attr, this->fileHandle);

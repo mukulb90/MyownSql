@@ -14,6 +14,7 @@ class LeafNode;
 class Node;
 class AuxiloryNode;
 class Graph;
+class Entry;
 
 typedef enum {
 	ROOT = 0, AUXILORY, LEAF
@@ -72,7 +73,7 @@ public:
 	bool lowKeyInclusive;
 	bool highKeyInclusive;
 	LeafNode* leafNode;
-	char* cursor;
+	Entry* currentEntry;
 
 	// Constructor
 	IX_ScanIterator();
@@ -193,6 +194,8 @@ public:
 //	This constructor is used to create a new node if id is known but not type
 	Node(const int &id, const FileHandle &fileHandle);
 
+	~Node();
+
 	RC insertEntry(Entry* entry);
 
 // 	save the node on file system
@@ -268,10 +271,10 @@ public:
 
 	Graph(const FileHandle &fileHandle);
 	Graph(const FileHandle &fileHandle, const Attribute& attr);
+	~Graph();
 
 	static Graph* instance(const FileHandle &fileHandle);
 	static Graph* instance(const FileHandle &fileHandle, const Attribute &attr);
-
 	RC getNodeByIndex(int index, Node &node);
 	RC getNumberOfNodes(int &numberOfNodes);
 
