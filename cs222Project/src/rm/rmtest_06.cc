@@ -8,7 +8,7 @@ RC TEST_RM_6(const string &tableName)
 
     RID rid;    
     int tupleSize = 0;
-    int numTuples = 100;
+    int numTuples = 5;
     void *tuple;
     void *returnedData = malloc(200);
 
