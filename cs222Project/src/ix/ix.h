@@ -118,6 +118,7 @@ public:
 
 	virtual void* getKey() = 0;
 	virtual int getEntrySize() = 0;
+	virtual int getSpaceNeededToInsert() = 0;
 
 	friend bool operator <(Entry& entry, Entry& entry2);
 	friend bool operator <=(Entry& entry, Entry& entry2);
@@ -139,6 +140,7 @@ public:
 	LeafEntry(void* data, Attribute &attr);
 	void* getKey();
 	int getEntrySize();
+	int getSpaceNeededToInsert();
 
 	static LeafEntry* parse(Attribute &attr,const void* key, const int &pageNum,const int &slotNum);
 	static int getSize(Attribute &attr,const void* key);
@@ -159,6 +161,7 @@ public:
 
 	void* getKey();
 	int getEntrySize();
+	int getSpaceNeededToInsert();
 	Entry* getNextEntry();
 
 	static AuxiloryEntry* parse(Attribute &attr,const void* key, const int &leftPointer,const int &rightPointer);

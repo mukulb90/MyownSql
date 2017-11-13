@@ -136,7 +136,6 @@ void IndexManager::printBtree(IXFileHandle &ixfileHandle,
 
 }
 
-
 IX_ScanIterator::IX_ScanIterator() {
 }
 
@@ -180,7 +179,8 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key) {
 			this->getRIDAndKey((char*) this->cursor, rid, key);
 			return 0;
 		} else if (this->lowKeyInclusive && this->highKeyInclusive) {
-			if (compare(this->lowKey, cursor, this->attribute, false, false) <= 0
+			if (compare(this->lowKey, cursor, this->attribute, false, false)
+					<= 0
 					&& compare(this->highKey, cursor, this->attribute, false,
 							false) >= 0) {
 				this->numberOfElementsIterated++;
@@ -188,7 +188,8 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key) {
 				return 0;
 			}
 		} else if (this->lowKeyInclusive && !this->highKeyInclusive) {
-			if (compare(this->lowKey, cursor, this->attribute, false, false) <= 0
+			if (compare(this->lowKey, cursor, this->attribute, false, false)
+					<= 0
 					&& compare(this->highKey, cursor, this->attribute, false,
 							false) > 0) {
 				this->numberOfElementsIterated++;
@@ -205,8 +206,8 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key) {
 			} else if (!this->lowKeyInclusive && !this->highKeyInclusive) {
 				if (compare(this->lowKey, cursor, this->attribute, false, false)
 						< 0
-						&& compare(this->highKey, cursor, this->attribute, false,
-								false) > 0) {
+						&& compare(this->highKey, cursor, this->attribute,
+								false, false) > 0) {
 					this->numberOfElementsIterated++;
 					this->getRIDAndKey((char*) cursor, rid, key);
 					return 0;
@@ -218,10 +219,11 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key) {
 }
 
 RC IX_ScanIterator::close() {
-	if(this->ixfileHandle->fileHandle->file == 0){
+	if (this->ixfileHandle->fileHandle->file == 0) {
 		return -1;
 	}
-	return PagedFileManager::instance()->closeFile(*this->ixfileHandle->fileHandle);
+	return PagedFileManager::instance()->closeFile(
+			*this->ixfileHandle->fileHandle);
 }
 
 IXFileHandle::IXFileHandle() {
@@ -292,8 +294,8 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 	stack<Entry*> visitedEntries;
 	visitedNodes.push(this->root);
 	node->getNodeType(nodeType);
-	LeafEntry* entry = LeafEntry::parse(this->attr, (void*)key, rid.pageNum, rid.slotNum);
-
+	LeafEntry* entry = LeafEntry::parse(this->attr, (void*) key, rid.pageNum,
+			rid.slotNum);
 
 	int numberOfKeys;
 	node->getNumberOfKeys(numberOfKeys);
@@ -302,7 +304,9 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 		LeafNode* leafNode = new LeafNode(this->attr, this->fileHandle);
 		leafNode->insertEntry(entry);
 		leafNode->serialize();
-		AuxiloryEntry * entry = AuxiloryEntry::parse(this->attr, key, INVALID_POINTER, leafNode->id);
+		AuxiloryEntry * entry = AuxiloryEntry::parse(this->attr, key,
+				INVALID_POINTER, leafNode->id);
+		root->insertEntry(entry);
 		root->insertEntry(entry);
 		root->serialize();
 		return 0;
@@ -312,7 +316,7 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 	while (nodeType != LEAF) {
 		AuxiloryNode* auxiloryNode = (AuxiloryNode*) node;
 		parentEntry = auxiloryNode->search(key, node);
-		if(node == NULL) {
+		if (node == NULL) {
 			break;
 		}
 		visitedNodes.push(node);
@@ -328,15 +332,16 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 		return 0;
 	}
 
-	if(leafNode == NULL){
+	if (leafNode == NULL) {
 		leafNode = new LeafNode(this->attr, this->fileHandle);
 		leafNode->insertEntry(entry);
-		AuxiloryEntry* parentAuxiloryEntry =  (AuxiloryEntry*)parentEntry;
-		if(*entry >= *parentEntry) {
+		AuxiloryEntry* parentAuxiloryEntry = (AuxiloryEntry*) parentEntry;
+		if (*entry >= *parentEntry) {
 			parentAuxiloryEntry->setRightPointer(leafNode->id);
 
 			int leftSiblingId = parentAuxiloryEntry->getLeftPointer();
-			LeafNode* leftSibling =  new LeafNode(leftSiblingId, this->attr, this->fileHandle);
+			LeafNode* leftSibling = new LeafNode(leftSiblingId, this->attr,
+					this->fileHandle);
 			leftSibling->deserialize();
 			int tempNext;
 			leftSibling->getSibling(tempNext);
@@ -356,7 +361,6 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 		return 0;
 	}
 
-
 // for now , keep inserting in same node
 	return -1;
 }
@@ -365,8 +369,7 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 //
 //	}
 
-AuxiloryNode::AuxiloryNode(const Attribute &attr,
-		const FileHandle &fileHandle) :
+AuxiloryNode::AuxiloryNode(const Attribute &attr, const FileHandle &fileHandle) :
 		Node(fileHandle.file->numberOfPages, attr, fileHandle) {
 	this->setNodeType(AUXILORY);
 }
@@ -463,20 +466,20 @@ Node* Node::split() {
 
 	this->getNodeType(nodeType);
 
-	if(nodeType == AUXILORY || nodeType == ROOT){
+	if (nodeType == AUXILORY || nodeType == ROOT) {
 		splitNode = new AuxiloryNode(this->attr, this->fileHandle);
 	} else {
 		splitNode = new LeafNode(this->attr, this->fileHandle);
 	}
 
-	for(int i=0; i<numberOfKeys; i++) {
-		if(nodeType == AUXILORY || nodeType == ROOT){
+	for (int i = 0; i < numberOfKeys; i++) {
+		if (nodeType == AUXILORY || nodeType == ROOT) {
 			entry = new AuxiloryEntry(cursor, this->attr);
 		} else {
 			entry = new LeafEntry(cursor, this->attr);
 		}
 
-		if(i>numberOfKeys/2) {
+		if (i > numberOfKeys / 2) {
 			numberOfKeysInSplitNode++;
 		} else {
 			newFreeSpaceInCurrentNode += entry->getEntrySize();
@@ -484,9 +487,9 @@ Node* Node::split() {
 
 		cursor += entry->getEntrySize();
 	}
-	if(nodeType == LEAF) {
-		LeafNode* leafNode = (LeafNode*)this;
-		LeafNode* splitLeafNode = (LeafNode*)splitNode;
+	if (nodeType == LEAF) {
+		LeafNode* leafNode = (LeafNode*) this;
+		LeafNode* splitLeafNode = (LeafNode*) splitNode;
 		int currentNodeSibling;
 		leafNode->getSibling(currentNodeSibling);
 		splitLeafNode->setSibling(currentNodeSibling);
@@ -505,16 +508,16 @@ RC Node::setNodeType(const NodeType& nodeType) {
 	return 0;
 }
 
-RC Node::getFreeSpace(int &freeSpace){
+RC Node::getFreeSpace(int &freeSpace) {
 	char* cursor = (char*) this->data;
-	cursor += 2*sizeof(int);
+	cursor += 2 * sizeof(int);
 	memcpy(&freeSpace, cursor, sizeof(int));
 	return 0;
 }
 
 RC Node::setFreeSpace(const int &freeSpace) {
 	char* cursor = (char*) this->data;
-	cursor += 2*sizeof(int);
+	cursor += 2 * sizeof(int);
 	memcpy(cursor, &freeSpace, sizeof(int));
 	return 0;
 }
@@ -526,30 +529,32 @@ Entry* AuxiloryNode::search(const void * key, Node* &nextNode) {
 	Entry* parentEntry = 0;
 	int numberOfKeys, nextPointer = INVALID_POINTER, leftPointer, rightPointer;
 	this->getNumberOfKeys(numberOfKeys);
-	if(numberOfKeys == 0) {
+	if (numberOfKeys == 0) {
 		nextNode = NULL;
 		return parentEntry;
 	}
-	Entry* searchEntry = new AuxiloryEntry((void*)key, this->attr);
+	Entry* searchEntry = new AuxiloryEntry((void*) key, this->attr);
 	AuxiloryEntry* firstEntry = new AuxiloryEntry(cursor, this->attr);
 
-	for(int i=0; i<numberOfKeys; i++) {
+	for (int i = 0; i < numberOfKeys; i++) {
 		firstEntry->unparse(this->attr, tempKey, leftPointer, rightPointer);
 		parentEntry = firstEntry;
-		if(*searchEntry < *(Entry*)firstEntry && leftPointer != INVALID_POINTER){
+		if (*searchEntry
+				< *(Entry*) firstEntry&& leftPointer != INVALID_POINTER) {
 			nextPointer = leftPointer;
 			break;
 		}
-		if(i == numberOfKeys - 1) {
-			if(*searchEntry >= *((Entry*)firstEntry) && rightPointer != INVALID_POINTER) {
+		if (i == numberOfKeys - 1) {
+			if (*searchEntry
+					>= *((Entry*) firstEntry)&& rightPointer != INVALID_POINTER) {
 				nextPointer = rightPointer;
 				break;
 			}
 		}
-		firstEntry = (AuxiloryEntry*)firstEntry->getNextEntry();
+		firstEntry = (AuxiloryEntry*) firstEntry->getNextEntry();
 	}
 	freeIfNotNull(tempKey);
-	if(nextPointer == INVALID_POINTER) {
+	if (nextPointer == INVALID_POINTER) {
 		nextNode = NULL;
 		return parentEntry;
 	}
@@ -558,7 +563,7 @@ Entry* AuxiloryNode::search(const void * key, Node* &nextNode) {
 	return parentEntry;
 }
 
-string AuxiloryNode::toJson(){
+string AuxiloryNode::toJson() {
 
 	void* tempdata = malloc(this->attr.length);
 	int leftPointer, rightPointer;
@@ -576,11 +581,11 @@ string AuxiloryNode::toJson(){
 		jsonString += entry->toJson();
 		entry->unparse(this->attr, tempdata, leftPointer, rightPointer);
 		entry = (AuxiloryEntry*) entry->getNextEntry();
-		if(unique_children.find(leftPointer) == unique_children.end()){
+		if (unique_children.find(leftPointer) == unique_children.end()) {
 			children.push_back(leftPointer);
 			unique_children.insert(leftPointer);
 		}
-		if(unique_children.find(rightPointer) == unique_children.end()){
+		if (unique_children.find(rightPointer) == unique_children.end()) {
 			children.push_back(rightPointer);
 			unique_children.insert(rightPointer);
 		}
@@ -622,57 +627,55 @@ RC Node::getMetaDataSize() {
 
 RC Node::insertEntry(Entry* entry) {
 	int numberOfKeys, freeSpace, spaceRequiredByEntry;
-		char* cursor = (char*) this->data;
-		int startOffset = 0;
-		this->getNumberOfKeys(numberOfKeys);
-		this->getFreeSpace(freeSpace);
+	char* cursor = (char*) this->data;
+	int startOffset = 0;
+	this->getNumberOfKeys(numberOfKeys);
+	this->getFreeSpace(freeSpace);
 
-		spaceRequiredByEntry = entry->getEntrySize();
-		if(spaceRequiredByEntry > freeSpace) {
-	//		Not enough Space in the Leaf Node
-			return -1;
+	spaceRequiredByEntry = entry->getEntrySize();
+	if (spaceRequiredByEntry > freeSpace) {
+		//		Not enough Space in the Leaf Node
+		return -1;
+	}
+
+	cursor += this->getMetaDataSize();
+	startOffset += this->getMetaDataSize();
+	Attribute attr;
+	Entry* nodeEntry;
+
+	//	Find correct position to insert such that Entries are sorted
+	for (int i = 0; i < numberOfKeys; i++) {
+		NodeType nodeType;
+		this->getNodeType(nodeType);
+		if (nodeType == AUXILORY) {
+			nodeEntry = new AuxiloryEntry(cursor, this->attr);
+		} else {
+			nodeEntry = new LeafEntry(cursor, this->attr);
 		}
+		int nodeEntrySize = nodeEntry->getSpaceNeededToInsert();
 
-		cursor += this->getMetaDataSize();
-		startOffset += this->getMetaDataSize();
-		Attribute attr;
-		Entry* nodeEntry;
-
-
-		//	Find correct position to insert such that Entries are sorted
-		for(int i=0; i<numberOfKeys; i++) {
-			NodeType nodeType;
-			this->getNodeType(nodeType);
-			if(nodeType == AUXILORY) {
-				nodeEntry = new AuxiloryEntry(cursor, this->attr);
-			} else {
-				nodeEntry = new LeafEntry(cursor, this->attr);
-			}
-			int nodeEntrySize = nodeEntry->getEntrySize();
-
-			if(*nodeEntry > *entry){
-				//			make space for new entry
-				int shiftSize  = PAGE_SIZE - startOffset - spaceRequiredByEntry;
-				void* buffer = malloc(shiftSize);
-				memcpy(buffer, cursor, shiftSize);
-				memcpy(cursor, entry->data, spaceRequiredByEntry);
-				cursor += spaceRequiredByEntry;
-				memcpy(cursor, buffer, shiftSize);
-				this->setNumberOfKeys(numberOfKeys + 1);
-				this->setFreeSpace(freeSpace - spaceRequiredByEntry);
-				free(buffer);
-				return 0;
-			} else {
-				cursor += nodeEntrySize;
-				startOffset += nodeEntrySize;
-			}
+		if (*nodeEntry > *entry) {
+			//			make space for new entry
+			int shiftSize = PAGE_SIZE - startOffset - spaceRequiredByEntry;
+			void* buffer = malloc(shiftSize);
+			memcpy(buffer, cursor, shiftSize);
+			memcpy(cursor, entry->data, spaceRequiredByEntry);
+			cursor += nodeEntrySize;
+			memcpy(cursor, buffer, shiftSize);
+			this->setNumberOfKeys(numberOfKeys + 1);
+			this->setFreeSpace(freeSpace - spaceRequiredByEntry);
+			free(buffer);
+			return 0;
+		} else {
+			cursor += nodeEntrySize;
+			startOffset += nodeEntrySize;
 		}
-		memcpy(cursor, entry->data, spaceRequiredByEntry);
-		this->setNumberOfKeys(numberOfKeys + 1);
-		this->setFreeSpace(freeSpace - spaceRequiredByEntry);
-		return 0;
+	}
+	memcpy(cursor, entry->data, spaceRequiredByEntry);
+	this->setNumberOfKeys(numberOfKeys + 1);
+	this->setFreeSpace(freeSpace - spaceRequiredByEntry);
+	return 0;
 }
-
 
 LeafNode::LeafNode(Attribute const &attr, FileHandle const& fileHandle) :
 		Node(fileHandle.file->numberOfPages, attr, fileHandle) {
@@ -680,61 +683,67 @@ LeafNode::LeafNode(Attribute const &attr, FileHandle const& fileHandle) :
 	this->setSibling(-1);
 }
 
-LeafNode::LeafNode(const int &id, Attribute const &attr, FileHandle const& fileHandle) :
+LeafNode::LeafNode(const int &id, Attribute const &attr,
+		FileHandle const& fileHandle) :
 		Node(id, attr, fileHandle) {
 	this->setNodeType(LEAF);
 	this->setSibling(-1);
 }
 
 RC LeafNode::setSibling(const int& pageNum) {
-	char* cursor = (char*)this->data;
-	cursor += 3*sizeof(int);
+	char* cursor = (char*) this->data;
+	cursor += 3 * sizeof(int);
 	memcpy(cursor, &pageNum, sizeof(int));
 	return 0;
 }
 
 RC LeafNode::getSibling(int& pageNum) {
 	char* cursor = (char*) this->data;
-	cursor += 3*sizeof(int);
+	cursor += 3 * sizeof(int);
 	memcpy(&pageNum, cursor, sizeof(int));
 	return 0;
 }
 
-string LeafNode::toJson(){
+string LeafNode::toJson() {
 	string jsonString = "";
 	jsonString = "{\"keys\":[";
 	char* cursor = (char*) this->data;
 	cursor = cursor + this->getMetaDataSize();
 	int numberOfKeys;
 	this->getNumberOfKeys(numberOfKeys);
-	Entry *entry = new LeafEntry(cursor,this->attr);
+	Entry *entry = new LeafEntry(cursor, this->attr);
 	for (int i = 0; i < numberOfKeys; i++) {
 		jsonString += entry->toJson();
-		i != numberOfKeys -1 ? jsonString += " , " : "";
+		i != numberOfKeys - 1 ? jsonString += " , " : "";
 		entry = entry->getNextEntry();
 	}
-	jsonString+="]}";
+	jsonString += "]}";
 	return jsonString;
 
 }
 
 bool operator <(Entry& entry, Entry& entry2) {
-	return compare(entry2.getKey(), entry.getKey(), entry.attr, false, false) < 0;
+	return compare(entry2.getKey(), entry.getKey(), entry.attr, false, false)
+			< 0;
 }
 
 bool operator <=(Entry& entry, Entry& entry2) {
-	return compare(entry2.getKey(), entry.getKey(), entry.attr, false, false) <= 0;
+	return compare(entry2.getKey(), entry.getKey(), entry.attr, false, false)
+			<= 0;
 }
 bool operator >(Entry & entry, Entry & entry2) {
-	return compare(entry2.getKey(), entry.getKey(), entry.attr, false, false) > 0;
+	return compare(entry2.getKey(), entry.getKey(), entry.attr, false, false)
+			> 0;
 }
 
 bool operator >=(Entry & entry, Entry & entry2) {
-	return compare(entry2.getKey(), entry.getKey(), entry.attr, false, false) >= 0;
+	return compare(entry2.getKey(), entry.getKey(), entry.attr, false, false)
+			>= 0;
 }
 
 bool operator ==(Entry & entry, Entry & entry2) {
-	return compare(entry2.getKey(), entry.getKey(), entry.attr, false, false) == 0;
+	return compare(entry2.getKey(), entry.getKey(), entry.attr, false, false)
+			== 0;
 }
 
 LeafEntry::LeafEntry(void* data, Attribute &attribute) {
@@ -742,44 +751,48 @@ LeafEntry::LeafEntry(void* data, Attribute &attribute) {
 	this->attr = attribute;
 }
 
-int LeafEntry::getEntrySize(){
+int LeafEntry::getEntrySize() {
 	return LeafEntry::getSize(this->attr, this->getKey());
+}
+
+int LeafEntry::getSpaceNeededToInsert() {
+	return this->getEntrySize();
 }
 
 void* LeafEntry::getKey() {
 	return this->data;
 }
 
-string LeafEntry::toJson(){
+string LeafEntry::toJson() {
 	void* key = malloc(this->attr.length);
 	int slotNum, pageNum;
-	string json= "";
-	json+="\"";
-	this->unparse(this->attr,key,pageNum,slotNum);
-	string keyString="";
+	string json = "";
+	json += "\"";
+	this->unparse(this->attr, key, pageNum, slotNum);
+	string keyString = "";
 	if (attr.type == TypeInt || attr.type == TypeReal) {
-		 keyString = to_string(*((int*) key));
+		keyString = to_string(*((int*) key));
 
 	} else if (attr.type == TypeReal) {
-		 keyString = to_string(*((float*) key));
+		keyString = to_string(*((float*) key));
 	} else if (attr.type == TypeVarChar) {
 		VarcharParser* varchar = new VarcharParser(this->getKey());
 		varchar->unParse(keyString);
 		varchar->data = 0;
 	}
-	keyString = to_string(*((int*)key));
-	json+=keyString + ":";
-	json+="("+to_string(pageNum)+","+to_string(slotNum)+")";
-	json+="\"";
+	keyString = to_string(*((int*) key));
+	json += keyString + ":";
+	json += "(" + to_string(pageNum) + "," + to_string(slotNum) + ")";
+	json += "\"";
 	return json;
 }
 
-RC LeafEntry::unparse(Attribute &attr, void* key, int& pageNum,int& slotNum){
+RC LeafEntry::unparse(Attribute &attr, void* key, int& pageNum, int& slotNum) {
 	char * cursor = (char *) this->data;
-	if(this->data == 0) {
+	if (this->data == 0) {
 		return -1;
 	}
-	if(attr.type == TypeInt) {
+	if (attr.type == TypeInt) {
 		memcpy(key, cursor, sizeof(int));
 		cursor += sizeof(int);
 		memcpy(&pageNum, cursor, sizeof(int));
@@ -795,7 +808,7 @@ RC LeafEntry::unparse(Attribute &attr, void* key, int& pageNum,int& slotNum){
 		memcpy(&slotNum, cursor, sizeof(int));
 		cursor += sizeof(int);
 		return 0;
-	} else if(attr.type == TypeVarChar) {
+	} else if (attr.type == TypeVarChar) {
 		VarcharParser* varchar = new VarcharParser(cursor);
 		string keyString;
 		varchar->unParse(keyString);
@@ -813,11 +826,12 @@ RC LeafEntry::unparse(Attribute &attr, void* key, int& pageNum,int& slotNum){
 	return -1;
 }
 
-LeafEntry* LeafEntry::parse(Attribute &attr, const void* key, const int &pageNum,const int &slotNum) {
+LeafEntry* LeafEntry::parse(Attribute &attr, const void* key,
+		const int &pageNum, const int &slotNum) {
 	void* leafEntryData = malloc(LeafEntry::getSize(attr, key));
 	LeafEntry* leafEntry = new LeafEntry(leafEntryData, attr);
 	char * cursor = (char *) leafEntry->data;
-	if(attr.type == TypeInt) {
+	if (attr.type == TypeInt) {
 		memcpy(cursor, key, sizeof(int));
 		cursor += sizeof(int);
 		memcpy(cursor, &pageNum, sizeof(int));
@@ -833,8 +847,8 @@ LeafEntry* LeafEntry::parse(Attribute &attr, const void* key, const int &pageNum
 		memcpy(cursor, &slotNum, sizeof(int));
 		cursor += sizeof(int);
 		return leafEntry;
-	} else if(attr.type == TypeVarChar) {
-		VarcharParser* varchar = new VarcharParser((void*)key);
+	} else if (attr.type == TypeVarChar) {
+		VarcharParser* varchar = new VarcharParser((void*) key);
 		string keyString;
 		varchar->unParse(keyString);
 
@@ -848,192 +862,248 @@ LeafEntry* LeafEntry::parse(Attribute &attr, const void* key, const int &pageNum
 		memcpy(cursor, &slotNum, sizeof(int));
 		cursor += sizeof(int);
 		return leafEntry;
-		}
-		return 0;
+	}
+	return 0;
+}
+
+void LeafEntry::setPageNum(int &pageNum) {
+	char* cursor = (char*) this->data;
+	if (attr.type == TypeInt) {
+		cursor += sizeof(int);
+		memcpy(cursor, &pageNum, sizeof(int));
+		return;
+	} else if (attr.type == TypeReal) {
+		cursor += sizeof(float);
+		memcpy(cursor, &pageNum, sizeof(int));
+		return;
+	} else if (attr.type == TypeVarChar) {
+		VarcharParser* varchar = new VarcharParser(cursor);
+		string keyString;
+		varchar->unParse(keyString);
+		cursor += sizeof(int) + keyString.size();
+		delete varchar;
+		memcpy(cursor, &pageNum, sizeof(int));
+		return;
+	}
+}
+
+void LeafEntry::setSlotNum(int &slotNum) {
+	char* cursor = (char*) this->data;
+	if (attr.type == TypeInt) {
+		cursor += 2 * sizeof(int);
+		memcpy(cursor, &slotNum, sizeof(int));
+		return;
+	} else if (attr.type == TypeReal) {
+		cursor += sizeof(float) + sizeof(int);
+		memcpy(cursor, &slotNum, sizeof(int));
+		return;
+	} else if (attr.type == TypeVarChar) {
+		VarcharParser* varchar = new VarcharParser(cursor);
+		string keyString;
+		varchar->unParse(keyString);
+		cursor += sizeof(int) + keyString.size();
+		cursor += sizeof(int);
+		delete varchar;
+		memcpy(cursor, &slotNum, sizeof(int));
+		return;
+	}
+}
+
+int LeafEntry::getPageNum() {
+	int pageNum;
+	char* cursor = (char*) this->data;
+	if (attr.type == TypeInt) {
+		cursor += sizeof(int);
+		memcpy(&pageNum, cursor, sizeof(int));
+		return pageNum;
+	} else if (attr.type == TypeReal) {
+		cursor += sizeof(float);
+		memcpy(&pageNum, cursor, sizeof(int));
+		return pageNum;
+	} else if (attr.type == TypeVarChar) {
+		VarcharParser* varchar = new VarcharParser(cursor);
+		string keyString;
+		varchar->unParse(keyString);
+		cursor += sizeof(int) + keyString.size();
+		delete varchar;
+		memcpy(&pageNum, cursor, sizeof(int));
+		return pageNum;
+	}
+	return INVALID_POINTER;
+}
+
+int LeafEntry::getSlotNum() {
+	char* cursor = (char*) this->data;
+	int slotNum;
+	if (attr.type == TypeInt) {
+		cursor += 2 * sizeof(int);
+		memcpy(&slotNum, cursor, sizeof(int));
+		return slotNum;
+	} else if (attr.type == TypeReal) {
+		cursor += sizeof(float) + sizeof(int);
+		memcpy(&slotNum, cursor, sizeof(int));
+		return slotNum;
+	} else if (attr.type == TypeVarChar) {
+		VarcharParser* varchar = new VarcharParser(cursor);
+		string keyString;
+		varchar->unParse(keyString);
+		cursor += sizeof(int) + keyString.size();
+		cursor += sizeof(int);
+		delete varchar;
+		memcpy(&slotNum, cursor, sizeof(int));
+		return slotNum;
+	}
+	return INVALID_POINTER;
+}
+
+int LeafEntry::getSize(Attribute &attr, const void* key) {
+	int size = 0;
+	if (attr.type == TypeInt || attr.type == TypeReal) {
+		size += sizeof(int);
+	} else {
+		VarcharParser* varchar = new VarcharParser((void*) key);
+		string keyString;
+		varchar->unParse(keyString);
+		size += sizeof(int) + keyString.size();
+		delete varchar;
 	}
 
-	void LeafEntry::setPageNum(int &pageNum) {
-		char* cursor = (char*)this->data;
-		if(attr.type == TypeInt) {
-			cursor += sizeof(int);
-			memcpy(cursor, &pageNum, sizeof(int));
-			return;
-		} else if (attr.type == TypeReal) {
-			cursor += sizeof(float);
-			memcpy(cursor, &pageNum, sizeof(int));
-			return;
-		} else if(attr.type == TypeVarChar) {
-			VarcharParser* varchar = new VarcharParser(cursor);
-			string keyString;
-			varchar->unParse(keyString);
-			cursor += sizeof(int) + keyString.size();
-			delete varchar;
-			memcpy(cursor, &pageNum, sizeof(int));
-			return;
-		}
+	size += sizeof(int) * 2;
+	return size;
+}
+
+Entry* LeafEntry::getNextEntry() {
+	char* cursor = (char*) this->data;
+	return (Entry*) new LeafEntry(cursor + this->getEntrySize(), this->attr);
+}
+
+AuxiloryEntry::AuxiloryEntry(void* data, Attribute & attr) {
+	this->data = data;
+	this->attr = attr;
+}
+
+void* AuxiloryEntry::getKey() {
+	char * cursor = (char *)this->data;
+	cursor += sizeof(int);
+	return  cursor;
+}
+
+int AuxiloryEntry::getEntrySize() {
+	return (new LeafEntry(this->data, this->attr))->getEntrySize();
+}
+
+AuxiloryEntry* AuxiloryEntry::parse(Attribute &attr, const void* key,
+		const int &leftPointer, const int &rightPointer) {
+	void * data = malloc(AuxiloryEntry::getSize(attr, (void*)key));
+	AuxiloryEntry* entry = new AuxiloryEntry(data, attr);
+	char* cursor = (char*) entry->data;
+	memcpy(cursor, &leftPointer, sizeof(int));
+	cursor += sizeof(int);
+	if(attr.type == TypeInt || attr.type == TypeReal) {
+		memcpy(cursor, key, sizeof(int));
+		cursor += sizeof(int);
+	} else {
+		VarcharParser* varchar = new VarcharParser((void*)key);
+		string stringKey;
+		varchar->unParse(stringKey);
+		memcpy(cursor, key, stringKey.size());
+		cursor += stringKey.size();
+	}
+	memcpy(cursor, &rightPointer, sizeof(int));
+	return entry;
+}
+
+int AuxiloryEntry::getSize(Attribute &attr, void* key) {
+	return LeafEntry::getSize(attr, key);
+}
+
+RC AuxiloryEntry::unparse(Attribute &attr, void* key, int &leftPointer,
+		int &rightPointer) {
+	char * cursor = (char*)this->data;
+	memcpy(&leftPointer, cursor, sizeof(int));
+	cursor += sizeof(int);
+	if(attr.type == TypeInt || attr.type == TypeReal) {
+		memcpy(key, cursor, sizeof(int));
+		cursor += sizeof(int);
+	} else {
+		VarcharParser* varcharParser = new VarcharParser(cursor);
+		string keyString;
+		varcharParser->unParse(keyString);
+		memcpy(key, cursor, sizeof(keyString.size()));
+		cursor += keyString.size();
 	}
 
-	void LeafEntry::setSlotNum(int &slotNum) {
-		char* cursor = (char*)this->data;
-		if(attr.type == TypeInt) {
-			cursor += 2*sizeof(int);
-			memcpy(cursor, &slotNum, sizeof(int));
-			return;
-		} else if (attr.type == TypeReal) {
-			cursor += sizeof(float) + sizeof(int);
-			memcpy(cursor, &slotNum, sizeof(int));
-			return;
-		} else if(attr.type == TypeVarChar) {
-			VarcharParser* varchar = new VarcharParser(cursor);
-			string keyString;
-			varchar->unParse(keyString);
-			cursor += sizeof(int) + keyString.size();
-			cursor += sizeof(int);
-			delete varchar;
-			memcpy(cursor, &slotNum, sizeof(int));
-			return;
-		}
+	memcpy(&rightPointer, cursor, sizeof(int));
+	return 0;
+}
+
+void AuxiloryEntry::setLeftPointer(int &leftPointer) {
+	char * cursor = (char*)this->data;
+	memcpy(cursor, &leftPointer, sizeof(int));
+}
+
+void AuxiloryEntry::setRightPointer(int &rightPointer) {
+	char * cursor = (char*)this->data;
+	cursor += sizeof(int);
+	if(attr.type == TypeInt || attr.type == TypeReal) {
+		cursor += sizeof(int);
+	} else {
+		VarcharParser* varcharParser = new VarcharParser(cursor);
+		string keyString;
+		varcharParser->unParse(keyString);
+		cursor += keyString.size();
 	}
+	memcpy(cursor, &rightPointer, sizeof(int));
+}
 
-	int LeafEntry::getPageNum() {
-		int pageNum;
-		char* cursor = (char*)this->data;
-		if(attr.type == TypeInt) {
-			cursor += sizeof(int);
-			memcpy(&pageNum, cursor, sizeof(int));
-			return pageNum;
-		} else if (attr.type == TypeReal) {
-			cursor += sizeof(float);
-			memcpy(&pageNum, cursor, sizeof(int));
-			return pageNum;
-		} else if(attr.type == TypeVarChar) {
-			VarcharParser* varchar = new VarcharParser(cursor);
-			string keyString;
-			varchar->unParse(keyString);
-			cursor += sizeof(int) + keyString.size();
-			delete varchar;
-			memcpy(&pageNum, cursor, sizeof(int));
-			return pageNum;
-		}
-		return INVALID_POINTER;
+int AuxiloryEntry::getLeftPointer() {
+	int leftPointer;
+	char * cursor = (char*)this->data;
+	memcpy(&leftPointer, cursor, sizeof(int));
+	return leftPointer;
+}
+
+int AuxiloryEntry::getRightPointer() {
+	int rightPointer;
+	char * cursor = (char*)this->data;
+	cursor += sizeof(int);
+	if(attr.type == TypeInt || attr.type == TypeReal) {
+		cursor += sizeof(int);
+	} else {
+		VarcharParser* varcharParser = new VarcharParser(cursor);
+		string keyString;
+		varcharParser->unParse(keyString);
+		cursor += keyString.size();
 	}
+	memcpy(&rightPointer, cursor, sizeof(int));
+	return rightPointer;
+}
 
-	int LeafEntry::getSlotNum() {
-		char* cursor = (char*)this->data;
-		int slotNum;
-		if(attr.type == TypeInt) {
-			cursor += 2*sizeof(int);
-			memcpy(&slotNum, cursor, sizeof(int));
-			return slotNum;
-		} else if (attr.type == TypeReal) {
-			cursor += sizeof(float) + sizeof(int);
-			memcpy(&slotNum, cursor, sizeof(int));
-			return slotNum;
-		} else if(attr.type == TypeVarChar) {
-			VarcharParser* varchar = new VarcharParser(cursor);
-			string keyString;
-			varchar->unParse(keyString);
-			cursor += sizeof(int) + keyString.size();
-			cursor += sizeof(int);
-			delete varchar;
-			memcpy(&slotNum, cursor, sizeof(int));
-			return slotNum;
-		}
-		return INVALID_POINTER;
+Entry* AuxiloryEntry::getNextEntry() {
+	char* cursor = (char*) this->data;
+	return (Entry*) new AuxiloryEntry(
+			cursor + this->getEntrySize() - sizeof(int), this->attr);
+}
+
+string AuxiloryEntry::toJson() {
+	string jsonString = "";
+	string keyString = "";
+	if (attr.type == TypeInt || attr.type == TypeReal) {
+		keyString = to_string(*((int*) this->getKey()));
+
+	} else if (attr.type == TypeReal) {
+		keyString = to_string(*((float*) this->getKey()));
+	} else if (attr.type == TypeVarChar) {
+		VarcharParser* varchar = new VarcharParser(this->getKey());
+		varchar->unParse(keyString);
+		varchar->data = 0;
 	}
-
-	int LeafEntry::getSize(Attribute &attr, const void* key) {
-		int size = 0;
-		if(attr.type == TypeInt || attr.type == TypeReal) {
-			size += sizeof(int);
-		} else {
-			VarcharParser* varchar = new VarcharParser((void*)key);
-			string keyString;
-			varchar->unParse(keyString);
-			size += sizeof(int) + keyString.size();
-			delete varchar;
-		}
-
-		size += sizeof(int)*2;
-		return size;
-	}
-
-		Entry* LeafEntry::getNextEntry() {
-			char* cursor = (char*)this->data;
-			return (Entry*)new LeafEntry(cursor + this->getEntrySize(), this->attr);
-		}
+	jsonString = keyString;
+	return jsonString;
+}
 
 
-	AuxiloryEntry::AuxiloryEntry(void* data, Attribute & attr) {
-		this->data = data;
-		this->attr = attr;
-	}
-
-
-	void* AuxiloryEntry::getKey() {
-		return (new LeafEntry(this->data, this->attr))->getKey();
-	}
-
-	int AuxiloryEntry::getEntrySize() {
-		return (new LeafEntry(this->data, this->attr))->getEntrySize();
-	}
-
-	AuxiloryEntry* AuxiloryEntry::parse(Attribute &attr,const  void* key, const int &leftPointer,const int &rightPointer) {
-		LeafEntry* leafEntry = LeafEntry::parse(attr, key, leftPointer, rightPointer);
-		return new AuxiloryEntry(leafEntry->data, attr);
-	}
-
-	int AuxiloryEntry::getSize(Attribute &attr, void* key) {
-		return LeafEntry::getSize(attr, key);
-	}
-
-	RC AuxiloryEntry::unparse(Attribute &attr, void* key, int &leftPointer, int &rightPointer){
-		LeafEntry* entry = new LeafEntry(this->data, this->attr);
-		return entry->unparse(attr, key, leftPointer, rightPointer);
-	}
-
-	void AuxiloryEntry::setLeftPointer(int &leftPointer) {
-		LeafEntry* entry = new LeafEntry(this->data, this->attr);
-		return entry->setPageNum(leftPointer);
-	}
-
-	void AuxiloryEntry::setRightPointer(int &rightPointer) {
-		LeafEntry* entry = new LeafEntry(this->data, this->attr);
-		return entry->setSlotNum(rightPointer);
-	}
-
-	int AuxiloryEntry::getLeftPointer() {
-		LeafEntry* entry = new LeafEntry(this->data, this->attr);
-		return entry->getPageNum();
-	}
-
-	int AuxiloryEntry::getRightPointer() {
-		LeafEntry* entry = new LeafEntry(this->data, this->attr);
-		return entry->getSlotNum();
-	}
-
-
-	Entry* AuxiloryEntry::getNextEntry() {
-		char* cursor = (char*)this->data;
-		return (Entry*) new AuxiloryEntry(cursor + this->getEntrySize() - sizeof(int), this->attr);
-	}
-
-	string AuxiloryEntry::toJson(){
-		string jsonString = "";
-		string keyString="";
-		if (attr.type == TypeInt || attr.type == TypeReal) {
-				 keyString = to_string(*((int*) this->getKey()));
-
-			} else if (attr.type == TypeReal) {
-				 keyString = to_string(*((float*) this->getKey()));
-			} else if (attr.type == TypeVarChar) {
-				VarcharParser* varchar = new VarcharParser(this->getKey());
-				varchar->unParse(keyString);
-				varchar->data = 0;
-			}
-		jsonString = keyString;
-		return jsonString;
-	}
-
-
+int AuxiloryEntry::getSpaceNeededToInsert() {
+	return this->getEntrySize() - sizeof(int);
+}
 
