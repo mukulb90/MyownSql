@@ -92,6 +92,19 @@ RC IndexManager::insertEntry(IXFileHandle &ixfileHandle,
 
 RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle,
 		const Attribute &attribute, const void *key, const RID &rid) {
+		int rc = 0;
+		FileHandle fileHandle = *(ixfileHandle.fileHandle);
+		if (fileHandle.file == 0) {
+			return -1;
+		}
+
+		Graph* graph = new Graph(fileHandle, attribute);
+		rc = graph->deserialize();
+		if (rc != 0) {
+			return rc;
+		}
+//		rc = graph->deleteEntry(key);
+
 	return -1;
 }
 
@@ -365,9 +378,35 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 	return -1;
 }
 
-//RC Graph::insertManualEntry(const void * key, RID const& rid) {
-//
-//	}
+RC Node::deleteEntry(Entry * deleteEntry){
+
+	int numberOfKeys = 0;
+	this->getNumberOfKeys(numberOfKeys);
+	char* cursor = (char*) this->data;
+	cursor = cursor + this->getMetaDataSize();
+	Entry *entry = new LeafEntry(cursor, this->attr);
+
+	cout << "Search key :: " << *((int*) deleteEntry->getKey()) << endl;
+	for (int i = 0; i < numberOfKeys; i++) {
+		int flag = 0;
+		if (*entry == *deleteEntry) {
+			cout << "Key  " << *((int*) entry->getKey()) << endl;
+			entry = entry->getNextEntry();
+			for (int j = i; i < numberOfKeys; i++) {
+				memcpy((char*) entry->data - entry->getEntrySize(), entry->data,
+						entry->getEntrySize());
+				entry = entry->getNextEntry();
+			}
+			flag = 1;
+		}
+		entry = entry->getNextEntry();
+		if (flag == 1) {
+			break;
+		}
+	}
+	return 0;
+}
+
 
 AuxiloryNode::AuxiloryNode(const Attribute &attr, const FileHandle &fileHandle) :
 		Node(fileHandle.file->numberOfPages, attr, fileHandle) {

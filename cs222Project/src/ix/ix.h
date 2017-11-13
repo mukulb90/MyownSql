@@ -217,6 +217,7 @@ public:
 
 	int getMetaDataSize();
 //	virtual string toJson() = 0;
+	RC deleteEntry(Entry * deleteEntry);
 
 
 };
