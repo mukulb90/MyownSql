@@ -129,7 +129,6 @@ public:
 	friend bool operator ==(Entry& entry, Entry& entry2);
 	virtual Entry* getNextEntry() = 0;
 	virtual string toJson() = 0;
-
 };
 
 
@@ -196,9 +195,6 @@ public:
 
 	RC insertEntry(Entry* entry);
 
-//	This method splits the Node into two splits and equally distributes the entries between both nodes
-	Node* split();
-
 // 	save the node on file system
 	RC serialize();
 
@@ -214,6 +210,7 @@ public:
 
 	RC setFreeSpace(const int &freeSpace);
 	RC getFreeSpace(int &freeSapce);
+	Entry* getFirstEntry();
 
 	int getMetaDataSize();
 //	virtual string toJson() = 0;
@@ -229,10 +226,15 @@ public:
 	LeafNode(const int &id, const Attribute &attr, const FileHandle &fileHandle);
 	~LeafNode();
 
-//	This method will try to insert the key in Leaf node, if not possible it will return -1
-//	RC insert(const void* value, const RID &rid);
-	RC setSibling(const int &pageNum);
-	RC getSibling(int &pageNum);
+	//	This method splits the Node into two splits and equally distributes the entries between both nodes
+	RC split(Node* firstNode, AuxiloryEntry* &entryPointingToBothNodes);
+	RC deleteEntry(Entry* entry);
+	RC setLeftSibling(const unsigned short &pageNum);
+	RC getLeftSibling(unsigned short &pageNum);
+	RC setRightSibling(const unsigned short &pageNum);
+	RC getRightSibling(unsigned short &pageNum);
+	RC addAfter(LeafNode *node);
+	RC addBefore(LeafNode* node);
 	string toJson();
 
 };
@@ -249,8 +251,10 @@ public:
 
 	~AuxiloryNode();
 
+	RC split(Node* firstNode, Node* secondNode, Entry* entryPointingToBothNodes);
 	RC getNumberOfChildNodes(int &numberOfNodes);
 	Entry* search(const void * key, Node* &nextNode);
+	RC deleteEntry(Entry* entry);
 	string toJson();
 };
 

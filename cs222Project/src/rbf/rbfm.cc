@@ -261,11 +261,11 @@ int compare(const void* to, const void* from, const Attribute &attr, bool isNull
 	}
 
 	if(from == NULL) {
-		return -1;
+		return 1;
 	}
 
 	if(to == NULL) {
-		return +1;
+		return -1;
 	}
 
 	if (attr.type == TypeInt) {
