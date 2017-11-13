@@ -442,7 +442,7 @@ RC RelationManager::deleteTable(const string &tableName)
 	while (iterator1->getNextRecord(ridColumn, columnsCatalogRecord) != -1) {
 		RIDVector.push_back(ridColumn);
 	}
-	free(columnsCatalogRecord);
+	freeIfNotNull(columnsCatalogRecord);
 	delete iterator1;
 	for (int i = 0; i < RIDVector.size(); i++) {
 		ridColumn = RIDVector.at(i);
@@ -485,7 +485,7 @@ RC RelationManager:: getTableDetailsByName(const string &tableName, int &tableId
 		vector<string> tablesCatalogParsedRecord  = getTableData(projectedAttribute, tablesCatalogRecord);
 		tableId = stoi(tablesCatalogParsedRecord[0]);
 		versionId = stoi(tablesCatalogParsedRecord[1]);
-		free(tablesCatalogRecord);
+		freeIfNotNull(tablesCatalogRecord);
 		return 0;
 }
 
@@ -592,7 +592,7 @@ RC RelationManager::getAttributesVector(const string &tableName, vector<vector<A
 				versionToRecordDescriptorMap[readVersionId][columnIndex] = readAttribute;
 			}
 		}
-		free(columnsCatalogRecord);
+		freeIfNotNull(columnsCatalogRecord);
 
 		for(auto it = versionToRecordDescriptorMap.begin(); it != versionToRecordDescriptorMap.end(); ++it)
 		{
@@ -777,7 +777,7 @@ RC RelationManager::dropAttribute(const string &tableName, const string &attribu
 		return rc;
 	}
 	delete (iter);
-	free(record);
+	freeIfNotNull(record);
 	rc = this->updateTuple(TABLE_CATALOG_NAME, newRecord->data, tablesRowRid);
 	delete newRecord;
 	this->invalidateCache(tableName);

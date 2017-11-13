@@ -154,7 +154,7 @@ RC RecordBasedFileManager::printRecord(const vector<Attribute> &recordDescriptor
 		int k = int(i/8);
 		*(nullarr+i) = nullstream[k] & (1<<(7 - i%8));
 	}
-	free(nullstream);
+	freeIfNotNull(nullstream);
 
 	cursor += nullBytes;
 	cout << "Record:-";
@@ -670,7 +670,7 @@ RC RecordBasedFileManager::shiftRecords(int &currRecordOffset, int &currRecordSi
 
 	memcpy((char*) page.data + currRecordOffset, (char*) buffer,
 			rightSideDataSize);
-	free(buffer);
+	freeIfNotNull(buffer);
 	return 0;
 }
 
@@ -794,7 +794,7 @@ RC RecordBasedFileManager::shiftNUpdateRecord(Page &page, int threshold_new,
 
 	page.setSlot(slotNumber, rOffset, recordSize);
 	page.setFreeSpaceOffset(page.getFreeSpaceOffset() + threshold_new);
-	free(buffer);
+	freeIfNotNull(buffer);
 	return 0;
 }
 
