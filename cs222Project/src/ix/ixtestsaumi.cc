@@ -62,6 +62,9 @@ int main() {
 	FileHandle fh;
 	indexManager->createFile("bulk_graph");
 	indexManager->openFile("bulk_graph", ifh);
+	RID rid;
+	rid.pageNum = 0;
+	rid.slotNum = 0;
 
 	fh = *ifh.fileHandle;
 
@@ -93,6 +96,10 @@ int main() {
 	Node *node1;
 	node1 = (Node*) graph->root;
 	cout << ((AuxiloryNode*)node1)->toJson();
+	int key =15;
+
+	indexManager->deleteEntry(ifh,attrs,&key,rid);
+
 
 }
 
