@@ -81,8 +81,6 @@ public:
 	// Destructor
 	~IX_ScanIterator();
 
-	void getRIDAndKey(char* from, RID& rid, void*key);
-
 	// Get next matching entry
 	RC getNextEntry(RID &rid, void *key);
 
@@ -177,6 +175,10 @@ public:
 
 class Node {
 
+protected:
+	//	This constructor is used to create a node if nodeId is known
+	Node(const int &id, const Attribute &attr, const FileHandle &fileHandle);
+	Node(const int &id, const FileHandle &fileHandle);
 public:
 
 	int id;
@@ -187,14 +189,9 @@ public:
 //	This constructor is used to create a new Node
 	Node(const Attribute &attr, const FileHandle &fileHandle);
 
-//	This constructor is used to create a node if nodeId is known
-	Node(const int &id, const Attribute &attr, const FileHandle &fileHandle);
-
-
-//	This constructor is used to create a new node if id is known but not type
-	Node(const int &id, const FileHandle &fileHandle);
-
 	~Node();
+
+	static Node* getInstance(const int &id, const Attribute &attr, const FileHandle &fileHandle);
 
 	RC insertEntry(Entry* entry);
 
@@ -219,7 +216,6 @@ public:
 //	virtual string toJson() = 0;
 	RC deleteEntry(Entry * deleteEntry);
 
-
 };
 
 class LeafNode: public Node {
@@ -232,10 +228,10 @@ public:
 	//	This method splits the Node into two splits and equally distributes the entries between both nodes
 	RC split(Node* firstNode, AuxiloryEntry* &entryPointingToBothNodes);
 	//RC deleteEntry(Entry* entry);
-	RC setLeftSibling(const unsigned short &pageNum);
-	RC getLeftSibling(unsigned short &pageNum);
-	RC setRightSibling(const unsigned short &pageNum);
-	RC getRightSibling(unsigned short &pageNum);
+	RC setLeftSibling(const short &pageNum);
+	RC getLeftSibling(short &pageNum);
+	RC setRightSibling(const short &pageNum);
+	RC getRightSibling(short &pageNum);
 	RC addAfter(LeafNode *node);
 	RC addBefore(LeafNode* node);
 	string toJson();
@@ -256,7 +252,6 @@ public:
 	~AuxiloryNode();
 
 	RC split(Node* firstNode, Node* secondNode, Entry* entryPointingToBothNodes);
-	RC getNumberOfChildNodes(int &numberOfNodes);
 	Entry* search(const void * key, Node* &nextNode);
 	RC deleteEntry(Entry* entry);
 	string toJson();
@@ -276,8 +271,6 @@ public:
 
 	static Graph* instance(const FileHandle &fileHandle);
 	static Graph* instance(const FileHandle &fileHandle, const Attribute &attr);
-	RC getNodeByIndex(int index, Node &node);
-	RC getNumberOfNodes(int &numberOfNodes);
 
 	RC serialize();
 	RC deserialize();
