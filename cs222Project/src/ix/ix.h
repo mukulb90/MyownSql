@@ -162,15 +162,15 @@ public:
 	int getSpaceNeededToInsert();
 	Entry* getNextEntry();
 
-	static AuxiloryEntry* parse(Attribute &attr,const void* key, const int &leftPointer,const int &rightPointer);
+	static AuxiloryEntry* parse(Attribute &attr,const void* key, const int &rightPointer);
 	static int getSize(Attribute &attr, void* key);
-	RC unparse(Attribute &attr, void* key, int &leftPointer, int &rightPointer);
+	RC unparse(Attribute &attr, void* key, int &rightPointer);
 	string toJson();
 
-	void setLeftPointer(int &leftPointer);
 	void setRightPointer(int &rightPointer);
 	int getLeftPointer();
 	int getRightPointer();
+	void setLeftPointer(int &leftPointer);
 };
 
 class Node {
@@ -255,6 +255,8 @@ public:
 	Entry* search(const void * key, Node* &nextNode);
 	RC deleteEntry(Entry* entry);
 	string toJson();
+	int getLeftPointer();
+	RC setLeftPointer(const int &leftPointer);
 };
 
 class Graph {

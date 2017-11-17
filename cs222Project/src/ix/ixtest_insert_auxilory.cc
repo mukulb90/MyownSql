@@ -13,15 +13,15 @@ int main(int argc, char **argv) {
 	AuxiloryNode* node = new AuxiloryNode(20, attr, fileHandle);
 
 	int key1 = 20;
-	AuxiloryEntry* entry =  AuxiloryEntry::parse(attr, &key1, 23, 45);
+	AuxiloryEntry* entry =  AuxiloryEntry::parse(attr, &key1, 45);
 	node->insertEntry(entry);
 
 	int key2 = 15;
-	AuxiloryEntry* entry2 = AuxiloryEntry::parse(attr, &key2, 1, 24);
+	AuxiloryEntry* entry2 = AuxiloryEntry::parse(attr, &key2, 24);
 	node->insertEntry(entry2);
 
 	int key3 = 16;
-	AuxiloryEntry* entry3 = AuxiloryEntry::parse(attr, &key3, 24, 23);
+	AuxiloryEntry* entry3 = AuxiloryEntry::parse(attr, &key3, 23);
 	node->insertEntry(entry3);
 
 	char* cursor = (char*) node->data;

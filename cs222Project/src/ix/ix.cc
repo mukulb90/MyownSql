@@ -282,7 +282,7 @@ Graph* Graph::instance(const FileHandle &fileHandle) {
 
 Graph::Graph(const FileHandle &fileHandle) {
 	this->root = new AuxiloryNode(0, fileHandle);
-	this->root->setNodeType(ROOT);
+	this->root->setNodeType(AUXILORY);
 	this->fileHandle = fileHandle;
 }
 
@@ -290,7 +290,7 @@ Graph::Graph(const FileHandle &fileHandle, const Attribute& attr) {
 	this->root = new AuxiloryNode(0, attr, fileHandle);
 	this->attr = attr;
 	this->fileHandle = fileHandle;
-	this->root->setNodeType(ROOT);
+	this->root->setNodeType(AUXILORY);
 }
 
 Graph::~Graph(){
@@ -322,8 +322,7 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 		LeafNode* leafNode = new LeafNode(this->attr, this->fileHandle);
 		leafNode->insertEntry(entry);
 		leafNode->serialize();
-		AuxiloryEntry * entry = AuxiloryEntry::parse(this->attr, key,
-				INVALID_POINTER, leafNode->id);
+		AuxiloryEntry * entry = AuxiloryEntry::parse(this->attr, key, leafNode->id);
 		root->insertEntry(entry);
 		root->serialize();
 		goto cleanup;
@@ -352,10 +351,10 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 				goto cleanup;
 			} else {
 				LeafNode* firstNode = new LeafNode(node->attr, node->fileHandle);
-				AuxiloryEntry* entryPointingToBothNodes;
-				((LeafNode*)node)->split((Node*)firstNode, entryPointingToBothNodes);
+				AuxiloryEntry* entryToBeInsertedInParent;
+				((LeafNode*)node)->split((Node*)firstNode, entryToBeInsertedInParent);
 //                TODO What if there is not enough space after split as well
-                if(*entryPointingToBothNodes < *entry){
+                if(*entryToBeInsertedInParent < *entry){
                     firstNode->insertEntry(entry);
                 } else {
                     node->insertEntry(entry);
@@ -364,7 +363,7 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 				firstNode->serialize();
 				node = visitedNodes.top();
 				visitedNodes.pop();
-				entry = entryPointingToBothNodes;
+				entry = entryToBeInsertedInParent;
 				continue;
 			}
 		}
@@ -482,21 +481,39 @@ RC LeafNode::deleteEntry(Entry * deleteEntry) {
 AuxiloryNode::AuxiloryNode(const Attribute &attr, const FileHandle &fileHandle) :
 		Node(fileHandle.file->numberOfPages, attr, fileHandle) {
 	this->setNodeType(AUXILORY);
+	this->setLeftPointer(INVALID_POINTER);
 }
 
 AuxiloryNode::AuxiloryNode(const int &id, const Attribute &attr,
 		const FileHandle &fileHandle) :
 		Node(id, attr, fileHandle) {
 	this->setNodeType(AUXILORY);
+	this->setLeftPointer(INVALID_POINTER);
 }
 
 AuxiloryNode::AuxiloryNode(const int &id, const FileHandle & fileHandle) :
 		Node(id, fileHandle) {
 	this->setNodeType(AUXILORY);
+	this->setLeftPointer(INVALID_POINTER);
 }
 
 AuxiloryNode::~AuxiloryNode() {
 
+}
+
+int AuxiloryNode::getLeftPointer() {
+	int* leftPointer = (int*)malloc(sizeof(int));
+	char * cursor = (char*) this->data;
+	cursor += 3*sizeof(int);
+	memcpy(leftPointer, cursor, sizeof(int));
+	return *leftPointer;
+}
+
+int AuxiloryNode::setLeftPointer(const int &leftPointer) {
+	char * cursor = (char*) this->data;
+	cursor += 3*sizeof(int);
+	memcpy(cursor, &leftPointer, sizeof(int));
+	return 0;
 }
 
 Node::Node(const int &id, const Attribute &attr, const FileHandle &fileHandle) {
@@ -598,8 +615,9 @@ Entry* AuxiloryNode::search(const void * key, Node* &nextNode) {
 	Entry* firstEntry = new AuxiloryEntry(cursor, this->attr);
 
 	for (int i = 0; i < numberOfKeys; i++) {
-		((AuxiloryEntry*)firstEntry)->unparse(this->attr, tempKey, leftPointer, rightPointer);
+		((AuxiloryEntry*)firstEntry)->unparse(this->attr, tempKey, rightPointer);
 		parentEntry = firstEntry;
+		leftPointer = ((AuxiloryEntry*)firstEntry)->getLeftPointer();
 		if (*searchEntry
 				< *firstEntry && leftPointer != INVALID_POINTER) {
 			nextPointer = leftPointer;
@@ -624,7 +642,6 @@ Entry* AuxiloryNode::search(const void * key, Node* &nextNode) {
 }
 
 string AuxiloryNode::toJson() {
-
 	void* tempdata = malloc(this->attr.length);
 	int leftPointer, rightPointer;
 	string jsonString = "{";
@@ -634,20 +651,21 @@ string AuxiloryNode::toJson() {
 	AuxiloryEntry *entry = new AuxiloryEntry(cursor, this->attr);
 	int numberOfKeys;
 	this->getNumberOfKeys(numberOfKeys);
+	cout << "Number of keys :" << numberOfKeys <<  endl;
 	unordered_set<int> unique_children;
-
+	leftPointer = this->getLeftPointer();
 	vector<int> children;
+	if(numberOfKeys > 0) {
+		children.push_back(leftPointer);
+		unique_children.insert(leftPointer);
+	}
 	for (int i = 0; i < numberOfKeys; i++) {
 		jsonString += entry->toJson();
         if(i != numberOfKeys-1) {
             jsonString += ",";
         }
-		entry->unparse(this->attr, tempdata, leftPointer, rightPointer);
+		entry->unparse(this->attr, tempdata, rightPointer);
 		entry = (AuxiloryEntry*) entry->getNextEntry();
-		if (unique_children.find(leftPointer) == unique_children.end()) {
-			children.push_back(leftPointer);
-			unique_children.insert(leftPointer);
-		}
 		if (unique_children.find(rightPointer) == unique_children.end()) {
 			children.push_back(rightPointer);
 			unique_children.insert(rightPointer);
@@ -664,12 +682,12 @@ string AuxiloryNode::toJson() {
 		Node *childNode = Node::getInstance(id, this->attr, this->fileHandle);
 		NodeType nodeType;
 		childNode->getNodeType(nodeType);
-		if (nodeType == LEAF) {
-			jsonString += ((LeafNode*) childNode)->toJson();
-		} else {
-			jsonString += ((AuxiloryNode*) childNode)->toJson();
-		}
-
+		// #HACK: Remove this Hacky Approach
+			if (nodeType == LEAF || id == INVALID_POINTER) {
+				jsonString += ((LeafNode*) childNode)->toJson();
+			} else {
+				jsonString += ((AuxiloryNode*) childNode)->toJson();
+			}
 		if (count != size - 1) {
 			jsonString += ",";
 
@@ -797,23 +815,25 @@ RC LeafNode::getRightSibling(short &pageNum) {
 	return 0;
 }
 
-RC LeafNode::split(Node* firstNode, AuxiloryEntry* &entryPointingToBothNodes) {
+RC LeafNode::split(Node* secondNode, AuxiloryEntry* &entryToBeInsertedInParent) {
 	int numberOfKeys = 0;
 	this->getNumberOfKeys(numberOfKeys);
 	Entry* entry = this->getFirstEntry();
 	for (int i = 0; i<numberOfKeys; ++i) {
 		if(i<numberOfKeys/2) {
-			firstNode->insertEntry(entry);
-			this->deleteEntry(entry);
+			entry = entry->getNextEntry();
 		} else {
-			break;
+			secondNode->insertEntry(entry);
+			this->deleteEntry(entry);
 		}
 	}
 
-	void* key = this->getFirstEntry()->getKey();
-	AuxiloryEntry* parentEntry = AuxiloryEntry::parse(this->attr, key, firstNode->id, this->id);
-	entryPointingToBothNodes = parentEntry;
-    this->addBefore((LeafNode*)firstNode);
+	void* key = secondNode->getFirstEntry()->getKey();
+//	AuxiloryEntry* parentEntry = AuxiloryEntry::parse(this->attr, key, firstNode->id, this->id);
+//	#TODO fix this logic
+	AuxiloryEntry* parentEntry = AuxiloryEntry::parse(this->attr, key, secondNode->id);
+	entryToBeInsertedInParent = parentEntry;
+    this->addAfter((LeafNode*)secondNode);
 	return 0;
 }
 
@@ -821,21 +841,25 @@ string LeafNode::toJson() {
     short leftPointer, rightPointer;
     this->getLeftSibling(leftPointer);
     this->getRightSibling(rightPointer);
-	string jsonString = "";
-	jsonString = "{\"keys\":[";
-    jsonString += "\"leftPointer:" + to_string(leftPointer) + "\", ";
-	char* cursor = (char*) this->data;
-	cursor = cursor + this->getMetaDataSize();
 	int numberOfKeys;
 	this->getNumberOfKeys(numberOfKeys);
+	string jsonString = "";
+	jsonString = "{\"keys\":[";
+	if(numberOfKeys > 0){
+	    jsonString += "\"leftPointer:" + to_string(leftPointer) + "\", ";
+	}
+	char* cursor = (char*) this->data;
+	cursor = cursor + this->getMetaDataSize();
 	Entry *entry = new LeafEntry(cursor, this->attr);
 	for (int i = 0; i < numberOfKeys; i++) {
 		jsonString += entry->toJson();
-		i != numberOfKeys - 1 ? jsonString += " , " : "";
+		jsonString += " , ";
 		entry = entry->getNextEntry();
 	}
 
-    jsonString += ", \"rightPointer:" + to_string(rightPointer) +"\"";
+	if(numberOfKeys > 0){
+	    jsonString += "\"rightPointer:" + to_string(rightPointer) +"\"";
+	}
     jsonString += "]}";
 	return jsonString;
 
@@ -1130,21 +1154,17 @@ void* AuxiloryEntry::getKey() {
 	if(this->data == NULL) {
 		return NULL;
 	}
-	cursor += sizeof(int);
 	return  cursor;
 }
 
 int AuxiloryEntry::getEntrySize() {
-	return (new LeafEntry(this->data, this->attr))->getEntrySize();
+	return (new LeafEntry(this->data, this->attr))->getEntrySize() - sizeof(int);
 }
 
-AuxiloryEntry* AuxiloryEntry::parse(Attribute &attr, const void* key,
-		const int &leftPointer, const int &rightPointer) {
+AuxiloryEntry* AuxiloryEntry::parse(Attribute &attr, const void* key, const int &rightPointer) {
 	void * data = malloc(AuxiloryEntry::getSize(attr, (void*)key));
 	AuxiloryEntry* entry = new AuxiloryEntry(data, attr);
 	char* cursor = (char*) entry->data;
-	memcpy(cursor, &leftPointer, sizeof(int));
-	cursor += sizeof(int);
 	if(attr.type == TypeInt || attr.type == TypeReal) {
 		memcpy(cursor, key, sizeof(int));
 		cursor += sizeof(int);
@@ -1160,14 +1180,12 @@ AuxiloryEntry* AuxiloryEntry::parse(Attribute &attr, const void* key,
 }
 
 int AuxiloryEntry::getSize(Attribute &attr, void* key) {
-	return LeafEntry::getSize(attr, key);
+	return LeafEntry::getSize(attr, key) - sizeof(int);
 }
 
-RC AuxiloryEntry::unparse(Attribute &attr, void* key, int &leftPointer,
+RC AuxiloryEntry::unparse(Attribute &attr, void* key,
 		int &rightPointer) {
 	char * cursor = (char*)this->data;
-	memcpy(&leftPointer, cursor, sizeof(int));
-	cursor += sizeof(int);
 	if(attr.type == TypeInt || attr.type == TypeReal) {
 		memcpy(key, cursor, sizeof(int));
 		cursor += sizeof(int);
@@ -1185,12 +1203,12 @@ RC AuxiloryEntry::unparse(Attribute &attr, void* key, int &leftPointer,
 
 void AuxiloryEntry::setLeftPointer(int &leftPointer) {
 	char * cursor = (char*)this->data;
+	cursor -= sizeof(int);
 	memcpy(cursor, &leftPointer, sizeof(int));
 }
 
 void AuxiloryEntry::setRightPointer(int &rightPointer) {
 	char * cursor = (char*)this->data;
-	cursor += sizeof(int);
 	if(attr.type == TypeInt || attr.type == TypeReal) {
 		cursor += sizeof(int);
 	} else {
@@ -1205,6 +1223,7 @@ void AuxiloryEntry::setRightPointer(int &rightPointer) {
 int AuxiloryEntry::getLeftPointer() {
 	int leftPointer;
 	char * cursor = (char*)this->data;
+	cursor -= sizeof(int);
 	memcpy(&leftPointer, cursor, sizeof(int));
 	return leftPointer;
 }
@@ -1228,7 +1247,7 @@ int AuxiloryEntry::getRightPointer() {
 Entry* AuxiloryEntry::getNextEntry() {
 	char* cursor = (char*) this->data;
 	return (Entry*) new AuxiloryEntry(
-			cursor + this->getEntrySize() - sizeof(int), this->attr);
+			cursor + this->getEntrySize(), this->attr);
 }
 
 string AuxiloryEntry::toJson() {
@@ -1250,6 +1269,6 @@ string AuxiloryEntry::toJson() {
 
 
 int AuxiloryEntry::getSpaceNeededToInsert() {
-	return this->getEntrySize() - sizeof(int);
+	return this->getEntrySize();
 }
 

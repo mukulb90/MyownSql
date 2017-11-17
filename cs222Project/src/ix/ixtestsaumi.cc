@@ -21,14 +21,14 @@ void printNode(Node *node) {
 	int leftPointer = NULL, rightPointer = NULL;
 	int tempKey;
 	//cout << node->toJson() << endl;
-	if (nodeType == ROOT || nodeType == AUXILORY) {
+	if (nodeType == AUXILORY) {
 		entry = new AuxiloryEntry(cursor, node->attr);
 		for (int i = 0; i < numberOfKeys; i++) {
 			tempKey = *((int*) entry->getKey());
 
 			void* key = malloc(node->attr.length);
 
-			((AuxiloryEntry*) entry)->unparse(node->attr, key, leftPointer,
+			((AuxiloryEntry*) entry)->unparse(node->attr, key,
 					rightPointer);
 
 			entry = entry->getNextEntry();
@@ -88,7 +88,7 @@ int main() {
 	graph->deserialize();
 
 	int key1 = 12;
-	AuxiloryEntry* entry = AuxiloryEntry::parse(attrs, &key1, node->id,
+	AuxiloryEntry* entry = AuxiloryEntry::parse(attrs, &key1,
 			rightNode->id);
 	graph->root->insertEntry(entry);
 	graph->serialize();
