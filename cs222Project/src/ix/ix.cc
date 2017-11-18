@@ -135,15 +135,16 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle, const Attribute &attribute,
 		delete graph;
 		return rc;
 	}
-	Node* node = graph->root;
+	Node* node = graph->getRoot();
 	Node* nextNode = 0;
 	NodeType nodeType;
 	node->getNodeType(nodeType);
 	while (nodeType != LEAF) {
 		AuxiloryNode* auxNode = (AuxiloryNode*) node;
-		auxNode->search(lowKey, nextNode);
-		nextNode->getNodeType(nodeType);
+		auxNode->search(lowKey, node);
+		node->getNodeType(nodeType);
 	}
+    nextNode = node;
 	LeafNode* leafNode = (LeafNode*) nextNode;
 	ix_ScanIterator.leafNode = leafNode;
 	ix_ScanIterator.numberOfElementsIterated = 0;
@@ -157,7 +158,7 @@ void IndexManager::printBtree(IXFileHandle &ixfileHandle,
 	FileHandle fileHandle = *(ixfileHandle.fileHandle);
 	Graph *graph = new Graph(fileHandle, attribute);
 	int rc = graph->deserialize();
-	Node* node = graph->root;
+	Node* node = graph->getRoot();
 	cout << ((AuxiloryNode*) node)->toJson() << endl;
 	delete graph;
 }
@@ -271,43 +272,57 @@ Graph* Graph::instance(const FileHandle &fileHandle) {
 	Graph* graph = new Graph(fileHandle);
 
 	// initialize a rootNode
-	AuxiloryNode* root = new AuxiloryNode(0, fileHandle);
-	root->setNumberOfKeys(0);
-	graph->root = root;
-	if (graph->root != 0) {
-		return graph;
-	}
-	return 0;
+	AuxiloryNode* internalRoot = new AuxiloryNode(0, fileHandle);
+    internalRoot->serialize();
+    internalRoot->setNumberOfKeys(0);
+    AuxiloryNode* root = new AuxiloryNode(1, fileHandle);
+    root->setNumberOfKeys(0);
+    root->serialize();
+    internalRoot->setLeftPointer(1);
+	graph->internalRoot = internalRoot;
+	return graph;
 }
 
 Graph::Graph(const FileHandle &fileHandle) {
-	this->root = new AuxiloryNode(0, fileHandle);
-	this->root->setNodeType(AUXILORY);
+	this->internalRoot = new AuxiloryNode(0, fileHandle);
+	this->internalRoot->setLeftPointer(1);
 	this->fileHandle = fileHandle;
+    (new AuxiloryNode(1, fileHandle))->serialize();
 }
 
 Graph::Graph(const FileHandle &fileHandle, const Attribute& attr) {
-	this->root = new AuxiloryNode(0, attr, fileHandle);
+	this->internalRoot = new AuxiloryNode(0, attr, fileHandle);
 	this->attr = attr;
 	this->fileHandle = fileHandle;
-	this->root->setNodeType(AUXILORY);
 }
 
 Graph::~Graph(){
-	delete this->root;
+	delete this->internalRoot;
 }
 
 RC Graph::serialize() {
-	return this->root->serialize();
+	return this->internalRoot->serialize();
+}
+
+AuxiloryNode* Graph::getRoot() {
+	int leftPointer;
+	leftPointer = this->internalRoot->getLeftPointer();
+	AuxiloryNode* root = new AuxiloryNode(leftPointer, this->attr, this->fileHandle);
+    root->deserialize();
+    return root;
+}
+
+void Graph::setRoot(AuxiloryNode *root) {
+    this->internalRoot->setLeftPointer(root->id);
 }
 
 RC Graph::deserialize() {
-	return this->root->deserialize();
+	return this->internalRoot->deserialize();
 }
 
 RC Graph::insertEntry(const void * key, RID const& rid) {
 	NodeType nodeType;
-	Node* node = this->root;
+	Node* node = this->getRoot();
 	Entry* parentEntry = 0;
 	stack<Node*> visitedNodes;
 	stack<Entry*> visitedEntries;
@@ -323,8 +338,8 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 		leafNode->insertEntry(entry);
 		leafNode->serialize();
 		AuxiloryEntry * entry = AuxiloryEntry::parse(this->attr, key, leafNode->id);
-		root->insertEntry(entry);
-		root->serialize();
+        node->insertEntry(entry);
+        node->serialize();
 		goto cleanup;
 	}
 
@@ -350,19 +365,38 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 				node->serialize();
 				goto cleanup;
 			} else {
-				LeafNode* firstNode = new LeafNode(node->attr, node->fileHandle);
+				Node* secondNode;
 				AuxiloryEntry* entryToBeInsertedInParent;
-				((LeafNode*)node)->split((Node*)firstNode, entryToBeInsertedInParent);
+				NodeType nodeType;
+				node->getNodeType(nodeType);
+				if(nodeType == AUXILORY) {
+					secondNode = new AuxiloryNode(node->attr, node->fileHandle);
+					((AuxiloryNode*)node) -> split(secondNode, entryToBeInsertedInParent);
+				} else {
+					secondNode = new LeafNode(node->attr, node->fileHandle);
+					((LeafNode*)node) -> split(secondNode, entryToBeInsertedInParent);
+				}
 //                TODO What if there is not enough space after split as well
-                if(*entryToBeInsertedInParent < *entry){
-                    firstNode->insertEntry(entry);
+                if(*entry >= *entryToBeInsertedInParent){
+                    secondNode->insertEntry(entry);
                 } else {
                     node->insertEntry(entry);
                 }
 				node->serialize();
-				firstNode->serialize();
-				node = visitedNodes.top();
-				visitedNodes.pop();
+				secondNode->serialize();
+				if(visitedNodes.size() != 0) {
+					node = visitedNodes.top();
+					visitedNodes.pop();
+				} else {
+                    int pointerToLeftSubtree = node->id;
+					node = new AuxiloryNode(node->attr, node->fileHandle);
+					((AuxiloryNode*)node)->setLeftPointer(pointerToLeftSubtree);
+                    node->insertEntry(entryToBeInsertedInParent);
+                    node->serialize();
+                    this->setRoot((AuxiloryNode*)node);
+                    this->serialize();
+                    goto cleanup;
+				}
 				entry = entryToBeInsertedInParent;
 				continue;
 			}
@@ -403,19 +437,19 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 	return -1;
 
 	cleanup:
-		while(!visitedNodes.empty()){
-			Node* top = visitedNodes.top();
-			visitedNodes.pop();
-			NodeType nodeType;
-			top->getNodeType(nodeType);
-			if(this->root != top)
-				delete top;
-		}
-		while(!visitedEntries.empty()){
-			Entry* top = visitedEntries.top();
-			visitedEntries.pop();
-			delete top;
-		}
+//		while(!visitedNodes.empty()){
+//			Node* top = visitedNodes.top();
+//			visitedNodes.pop();
+//			NodeType nodeType;
+//			top->getNodeType(nodeType);
+//			if(this->getRoot() != top)
+//				delete top;
+//		}
+//		while(!visitedEntries.empty()){
+//			Entry* top = visitedEntries.top();
+//			visitedEntries.pop();
+//			delete top;
+//		}
 
 		return 0;
 }
@@ -424,7 +458,7 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 RC Graph::deleteKey(const void * key) {
 	int rc = 0;
 	NodeType nodeType;
-	Node* node = this->root;
+	Node* node = this->getRoot();
 	Entry* parentEntry = 0;
 	node->getNodeType(nodeType);
 
@@ -443,7 +477,7 @@ RC Graph::deleteKey(const void * key) {
 	}
 }
 
-RC LeafNode::deleteEntry(Entry * deleteEntry) {
+RC Node::deleteEntry(Entry * deleteEntry) {
 	int rc = 0;
 	int numberOfKeys = 0;
 	int freeSpace = 0;
@@ -451,9 +485,7 @@ RC LeafNode::deleteEntry(Entry * deleteEntry) {
 	if (numberOfKeys < 1) {
 		rc = -1;
 	}
-	char* cursor = (char*) this->data;
-	cursor = cursor + this->getMetaDataSize();
-	Entry *entry = new LeafEntry(cursor, this->attr);
+	Entry *entry = this->getFirstEntry();
 
 	for (int i = 0; i < numberOfKeys; i++) {
 		int flag = 0;
@@ -820,6 +852,7 @@ RC LeafNode::split(Node* secondNode, AuxiloryEntry* &entryToBeInsertedInParent) 
 	this->getNumberOfKeys(numberOfKeys);
 	Entry* entry = this->getFirstEntry();
 	for (int i = 0; i<numberOfKeys; ++i) {
+//		##TODO change this to capacity based spliting
 		if(i<numberOfKeys/2) {
 			entry = entry->getNextEntry();
 		} else {
@@ -829,11 +862,33 @@ RC LeafNode::split(Node* secondNode, AuxiloryEntry* &entryToBeInsertedInParent) 
 	}
 
 	void* key = secondNode->getFirstEntry()->getKey();
-//	AuxiloryEntry* parentEntry = AuxiloryEntry::parse(this->attr, key, firstNode->id, this->id);
-//	#TODO fix this logic
 	AuxiloryEntry* parentEntry = AuxiloryEntry::parse(this->attr, key, secondNode->id);
 	entryToBeInsertedInParent = parentEntry;
     this->addAfter((LeafNode*)secondNode);
+	return 0;
+}
+
+RC AuxiloryNode::split(Node* secondNode, AuxiloryEntry* &entryToBeInsertedInParent) {
+	int numberOfKeys;
+	this->getNumberOfKeys(numberOfKeys);
+	AuxiloryEntry* entry = (AuxiloryEntry*) this->getFirstEntry();
+	AuxiloryNode* secondAuxiloryNode = (AuxiloryNode*)secondNode;
+	bool is_first_redistribution = true;
+	for(int i=0; i<numberOfKeys; i++) {
+		if(i<numberOfKeys/2) {
+			entry = (AuxiloryEntry*)entry->getNextEntry();
+		} else {
+			if(is_first_redistribution) {
+				is_first_redistribution = false;
+				secondAuxiloryNode->setLeftPointer(entry->getRightPointer());
+				entryToBeInsertedInParent = AuxiloryEntry::parse(this->attr, entry->getKey(), secondAuxiloryNode->id);
+			} else {
+				secondNode->insertEntry(entry);
+				this->deleteEntry(entry);
+			}
+            entry = (AuxiloryEntry*)entry->getNextEntry();
+        }
+	}
 	return 0;
 }
 
@@ -1231,7 +1286,6 @@ int AuxiloryEntry::getLeftPointer() {
 int AuxiloryEntry::getRightPointer() {
 	int rightPointer;
 	char * cursor = (char*)this->data;
-	cursor += sizeof(int);
 	if(attr.type == TypeInt || attr.type == TypeReal) {
 		cursor += sizeof(int);
 	} else {

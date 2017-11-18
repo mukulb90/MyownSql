@@ -213,9 +213,8 @@ public:
 	Entry* getFirstEntry();
 
 	int getMetaDataSize();
-//	virtual string toJson() = 0;
-	RC deleteEntry(Entry * deleteEntry);
 
+	RC deleteEntry(Entry * deleteEntry);
 };
 
 class LeafNode: public Node {
@@ -226,7 +225,8 @@ public:
 	~LeafNode();
 
 	//	This method splits the Node into two splits and equally distributes the entries between both nodes
-	RC split(Node* firstNode, AuxiloryEntry* &entryPointingToBothNodes);
+	RC split(Node* secondNode, AuxiloryEntry* &entryPointingToBothNodes);
+
 	//RC deleteEntry(Entry* entry);
 	RC setLeftSibling(const short &pageNum);
 	RC getLeftSibling(short &pageNum);
@@ -235,7 +235,7 @@ public:
 	RC addAfter(LeafNode *node);
 	RC addBefore(LeafNode* node);
 	string toJson();
-	RC deleteEntry(Entry * deleteEntry);
+//	RC deleteEntry(Entry * deleteEntry);
 
 };
 
@@ -251,19 +251,19 @@ public:
 
 	~AuxiloryNode();
 
-	RC split(Node* firstNode, Node* secondNode, Entry* entryPointingToBothNodes);
+	RC split(Node* secondNode, AuxiloryEntry* &entryPointingToBothNodes);
+
 	Entry* search(const void * key, Node* &nextNode);
-	RC deleteEntry(Entry* entry);
+//	RC deleteEntry(Entry* entry);
 	string toJson();
 	int getLeftPointer();
 	RC setLeftPointer(const int &leftPointer);
 };
 
 class Graph {
-
 public:
-
-	AuxiloryNode* root;
+    AuxiloryNode* internalRoot;
+//    AuxiloryNode* root;
 	Attribute attr;
 	FileHandle fileHandle;
 
@@ -273,6 +273,9 @@ public:
 
 	static Graph* instance(const FileHandle &fileHandle);
 	static Graph* instance(const FileHandle &fileHandle, const Attribute &attr);
+
+    AuxiloryNode* getRoot();
+    void setRoot(AuxiloryNode* root);
 
 	RC serialize();
 	RC deserialize();

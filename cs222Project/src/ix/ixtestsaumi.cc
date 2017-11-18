@@ -90,11 +90,11 @@ int main() {
 	int key1 = 12;
 	AuxiloryEntry* entry = AuxiloryEntry::parse(attrs, &key1,
 			rightNode->id);
-	graph->root->insertEntry(entry);
+	graph->getRoot()->insertEntry(entry);
 	graph->serialize();
 
 	Node *node1;
-	node1 = (Node*) graph->root;
+	node1 = (Node*) graph->getRoot();
 	cout << ((AuxiloryNode*)node1)->toJson();
 	int key =15;
 

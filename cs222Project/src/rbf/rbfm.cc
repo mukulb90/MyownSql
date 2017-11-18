@@ -663,7 +663,7 @@ RC RecordBasedFileManager::shiftRecords(int &currRecordOffset, int &currRecordSi
 	int rightSideDataSize = FreeSpaceOffset - currRecordOffset - currRecordSize;
 
 	///
-	void* buffer = malloc(4096);
+	void* buffer = malloc(PAGE_SIZE);
 	memcpy((char*) buffer,
 			(char*) page.data + currRecordOffset + currRecordSize,
 			rightSideDataSize);
@@ -745,7 +745,7 @@ RC RecordBasedFileManager::internalUpdateRecord(FileHandle &fileHandle,
 
 		int FreeSpaceOffset = page.getFreeSpaceOffset();
 		int rightSideDataSize = FreeSpaceOffset - rOffset- rSize;
-		void *buffer = malloc(4096);
+		void *buffer = malloc(PAGE_SIZE);
 		memcpy((char*)buffer, (char*)page.data + rOffset + rSize, rightSideDataSize);
 		memcpy((char*)page.data + rOffset+FORWARDER_SIZE, (char*)buffer, rightSideDataSize);
 
@@ -786,7 +786,7 @@ RC RecordBasedFileManager::shiftNUpdateRecord(Page &page, int threshold_new,
 	//shiftRecords(rOffset,rSize,page);
 	int FreeSpaceOffset = page.getFreeSpaceOffset();
 	int rightSideDataSize = FreeSpaceOffset - rOffset- rSize;
-	void* buffer = malloc(4096);
+	void* buffer = malloc(PAGE_SIZE);
 	memcpy((char*)buffer, (char*)page.data + rOffset + rSize, rightSideDataSize);
 
 	memcpy((char*)page.data + rOffset + rSize + threshold_new, (char*)buffer, rightSideDataSize);
