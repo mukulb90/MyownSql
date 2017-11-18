@@ -236,5 +236,5 @@ public:
 };
 
 void freeIfNotNull(void * data);
-int compare(const void* to, const void* from, const Attribute &attr, bool isNullBitsInTo, bool isNullBitsInFrom);
+float compare(const void* to, const void* from, const Attribute &attr, bool isNullBitsInTo, bool isNullBitsInFrom);
 #endif

@@ -123,18 +123,41 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle, const Attribute &attribute,
 		return -1;
 	}
 	ix_ScanIterator.ixfileHandle = &ixfileHandle;
-	ix_ScanIterator.lowKey = (void*) lowKey;
-	ix_ScanIterator.highKey = (void*) highKey;
-	ix_ScanIterator.lowKeyInclusive = lowKeyInclusive;
-	ix_ScanIterator.highKeyInclusive = highKeyInclusive;
+    if(lowKeyInclusive) {
+        ix_ScanIterator.lowOperator = GE_OP;
+    } else {
+        ix_ScanIterator.lowOperator = GT_OP;
+    }
+
+    if(highKeyInclusive) {
+        ix_ScanIterator.highOperator = LE_OP;
+    } else {
+        ix_ScanIterator.highOperator = LT_OP;
+    }
+
 	ix_ScanIterator.attribute = attribute;
 	FileHandle* fileHandle = ixfileHandle.fileHandle;
+
 	Graph* graph = new Graph(*fileHandle, attribute);
 	int rc = graph->deserialize();
 	if (rc == -1) {
 		delete graph;
 		return rc;
 	}
+
+
+    if(lowKey == NULL) {
+        ix_ScanIterator.lowKeyEntry = LeafEntry::parse(graph->attr, graph->getMinKey(), 0, 0);
+    } else {
+        ix_ScanIterator.lowKeyEntry = LeafEntry::parse(graph->attr, lowKey, 0, 0);
+    }
+
+    if(highKey == NULL) {
+        ix_ScanIterator.highKeyEntry = LeafEntry::parse(graph->attr, graph->getMaxKey(), 0, 0);
+    } else {
+        ix_ScanIterator.highKeyEntry = LeafEntry::parse(graph->attr, highKey, 0, 0);
+    }
+
 	Node* node = graph->getRoot();
 	Node* nextNode = 0;
 	NodeType nodeType;
@@ -170,56 +193,68 @@ IX_ScanIterator::~IX_ScanIterator() {
 }
 
 RC IX_ScanIterator::getNextEntry(RID &rid, void *key) {
+    int pageNum, slotNum;
+    Entry* lowKeyEntry = this->lowKeyEntry;
+    Entry* highKeyEntry = this->highKeyEntry;
     int numberOfKeys;
     this->leafNode->getNumberOfKeys(numberOfKeys);
-    start:
     this->ixfileHandle->ixReadPageCounter++;
-	while (this->numberOfElementsIterated < numberOfKeys) {
-		if (lowKey == NULL or highKey == NULL) {
-			this->numberOfElementsIterated++;
-			int pageNum, slotNum;
-			((LeafEntry*)this->currentEntry)->unparse(this->attribute, key, pageNum, slotNum);
-			rid.pageNum = pageNum;
-			rid.slotNum = slotNum;
-			this->currentEntry = this->currentEntry->getNextEntry();
-			return 0;
-//		} else if (this->lowKeyInclusive && this->highKeyInclusive) {
-//			if (compare(this->lowKey, cursor, this->attribute, false, false)
-//					<= 0
-//					&& compare(this->highKey, cursor, this->attribute, false,
-//							false) >= 0) {
-//				this->numberOfElementsIterated++;
-//				this->getRIDAndKey((char*) cursor, rid, key);
-//				return 0;
-//			}
-//		} else if (this->lowKeyInclusive && !this->highKeyInclusive) {
-//			if (compare(this->lowKey, cursor, this->attribute, false, false)
-//					<= 0
-//					&& compare(this->highKey, cursor, this->attribute, false,
-//							false) > 0) {
-//				this->numberOfElementsIterated++;
-//				this->getRIDAndKey((char*) cursor, rid, key);
-//				return 0;
-//			}
-//		} else if (!this->lowKeyInclusive && this->highKeyInclusive) {
-//			if (compare(this->lowKey, cursor, this->attribute, false, false) < 0
-//					&& compare(this->highKey, cursor, this->attribute, false,
-//							false) >= 0) {
-//				this->numberOfElementsIterated++;
-//				this->getRIDAndKey((char*) cursor, rid, key);
-//				return 0;
-//			} else if (!this->lowKeyInclusive && !this->highKeyInclusive) {
-//				if (compare(this->lowKey, cursor, this->attribute, false, false)
-//						< 0
-//						&& compare(this->highKey, cursor, this->attribute,
-//								false, false) > 0) {
-//					this->numberOfElementsIterated++;
-//					this->getRIDAndKey((char*) cursor, rid, key);
-//					return 0;
-//				}
-//			}
-		}
-	}
+    CompOp operator1 = this->lowOperator;
+    CompOp operator2 = this->highOperator;
+    start:
+        while(this->numberOfElementsIterated < numberOfKeys) {
+            if(*(this->currentEntry) > *highKeyEntry) {
+                return -1;
+            }
+            if(operator1 == GT_OP) {
+                if(operator2 == LT_OP) {
+//                < X <
+                    if(*lowKeyEntry < *(this->currentEntry) && *(this->currentEntry) < *(highKeyEntry)) {
+                        ((LeafEntry*)this->currentEntry)->unparse(this->attribute, key, pageNum, slotNum);
+                        rid.pageNum = pageNum;
+                        rid.slotNum = slotNum;
+                        this->numberOfElementsIterated++;
+                        this->currentEntry = this->currentEntry->getNextEntry();
+                        return 0;
+                    }
+                } else {
+//                < X <=
+                    if(*lowKeyEntry < *(this->currentEntry) && *(this->currentEntry) <= *(highKeyEntry)) {
+                        ((LeafEntry*)this->currentEntry)->unparse(this->attribute, key, pageNum, slotNum);
+                        rid.pageNum = pageNum;
+                        rid.slotNum = slotNum;
+                        this->numberOfElementsIterated++;
+                        this->currentEntry = this->currentEntry->getNextEntry();
+                        return 0;
+                    }
+                }
+            } else if(operator1 == GE_OP) {
+                if(operator2 == LT_OP) {
+//                <= X <
+                    if(*lowKeyEntry <= *(this->currentEntry) && *(this->currentEntry) < *(highKeyEntry)) {
+                        ((LeafEntry*)this->currentEntry)->unparse(this->attribute, key, pageNum, slotNum);
+                        rid.pageNum = pageNum;
+                        rid.slotNum = slotNum;
+                        this->numberOfElementsIterated++;
+                        this->currentEntry = this->currentEntry->getNextEntry();
+                        return 0;
+                    }
+                } else {
+//                <= X <=
+                    if(*lowKeyEntry <= *(this->currentEntry) && *(this->currentEntry) <= *(highKeyEntry)) {
+                        ((LeafEntry*)this->currentEntry)->unparse(this->attribute, key, pageNum, slotNum);
+                        rid.pageNum = pageNum;
+                        rid.slotNum = slotNum;
+                        this->numberOfElementsIterated++;
+                        this->currentEntry = this->currentEntry->getNextEntry();
+                        return 0;
+                    }
+                }
+            }
+            this->currentEntry = currentEntry->getNextEntry();
+            this->numberOfElementsIterated++;
+        }
+
     if(this->numberOfElementsIterated == numberOfKeys) {
         short rightSibling;
         this->leafNode->getRightSibling(rightSibling);
@@ -302,6 +337,54 @@ Graph::~Graph(){
 
 RC Graph::serialize() {
 	return this->internalRoot->serialize();
+}
+
+
+void* Graph::getMaxKey() {
+    Node* node = this->getRoot();
+    NodeType nodeType;
+    node->getNodeType(nodeType);
+    int numberOfEntries;
+    int nextNodePointer;
+    while(nodeType != LEAF) {
+        node->getNumberOfKeys(numberOfEntries);
+        Entry* entry = node->getFirstEntry();
+        for (int i = 0; i < numberOfEntries-1; ++i) {
+            entry = entry->getNextEntry();
+        }
+        nextNodePointer  = ((AuxiloryEntry*)entry)->getRightPointer();
+        if(nextNodePointer == INVALID_POINTER) {
+            nextNodePointer  = ((AuxiloryEntry*)entry)->getLeftPointer();
+        }
+
+        node = Node::getInstance(nextNodePointer, node->attr, node->fileHandle);
+        node->getNodeType(nodeType);
+    }
+    node->getNumberOfKeys(numberOfEntries);
+    Entry* entry = node->getFirstEntry();
+    for (int i = 0; i < numberOfEntries-1; ++i) {
+        entry = entry->getNextEntry();
+    }
+    return entry->getKey();
+}
+
+void* Graph::getMinKey() {
+    Node* node = this->getRoot();
+    NodeType nodeType;
+    node->getNodeType(nodeType);
+    int nextNodePointer;
+    while(nodeType != LEAF) {
+        Entry* entry = node->getFirstEntry();
+        nextNodePointer  = ((AuxiloryEntry*)entry)->getLeftPointer();
+        if(nextNodePointer == INVALID_POINTER) {
+            nextNodePointer  = ((AuxiloryEntry*)entry)->getRightPointer();
+        }
+
+        node = Node::getInstance(nextNodePointer, node->attr, node->fileHandle);
+        node->getNodeType(nodeType);
+    }
+    Entry* entry = node->getFirstEntry();
+    return entry->getKey();
 }
 
 AuxiloryNode* Graph::getRoot() {
@@ -650,6 +733,15 @@ Entry* AuxiloryNode::search(const void * key, Node* &nextNode) {
 		((AuxiloryEntry*)firstEntry)->unparse(this->attr, tempKey, rightPointer);
 		parentEntry = firstEntry;
 		leftPointer = ((AuxiloryEntry*)firstEntry)->getLeftPointer();
+        if(searchEntry->getKey() == NULL) {
+            if(leftPointer != INVALID_POINTER) {
+                nextPointer = leftPointer;
+                break;
+            } else {
+                nextPointer = rightPointer;
+                break;
+            }
+        }
 		if (*searchEntry
 				< *firstEntry && leftPointer != INVALID_POINTER) {
 			nextPointer = leftPointer;
@@ -683,7 +775,6 @@ string AuxiloryNode::toJson() {
 	AuxiloryEntry *entry = new AuxiloryEntry(cursor, this->attr);
 	int numberOfKeys;
 	this->getNumberOfKeys(numberOfKeys);
-	cout << "Number of keys :" << numberOfKeys <<  endl;
 	unordered_set<int> unique_children;
 	leftPointer = this->getLeftPointer();
 	vector<int> children;
@@ -998,7 +1089,7 @@ string LeafEntry::toJson() {
 	json += "\"";
 	this->unparse(this->attr, key, pageNum, slotNum);
 	string keyString = "";
-	if (attr.type == TypeInt || attr.type == TypeReal) {
+	if (attr.type == TypeInt) {
 		keyString = to_string(*((int*) key));
 
 	} else if (attr.type == TypeReal) {
@@ -1008,7 +1099,6 @@ string LeafEntry::toJson() {
 		varchar->unParse(keyString);
 		varchar->data = 0;
 	}
-	keyString = to_string(*((int*) key));
 	json += keyString + ":";
 	json += "(" + to_string(pageNum) + "," + to_string(slotNum) + ")";
 	json += "\"";
@@ -1307,7 +1397,7 @@ Entry* AuxiloryEntry::getNextEntry() {
 string AuxiloryEntry::toJson() {
 	string jsonString = "";
 	string keyString = "";
-	if (attr.type == TypeInt || attr.type == TypeReal) {
+	if (attr.type == TypeInt) {
 		keyString = to_string(*((int*) this->getKey()));
 
 	} else if (attr.type == TypeReal) {

@@ -68,10 +68,11 @@ public:
 	int numberOfElementsIterated;
 	IXFileHandle* ixfileHandle;
 	Attribute attribute;
-	void *lowKey;
-	void *highKey;
-	bool lowKeyInclusive;
-	bool highKeyInclusive;
+	Entry* lowKeyEntry;
+	Entry* highKeyEntry;
+
+	CompOp lowOperator;
+	CompOp highOperator;
 	LeafNode* leafNode;
 	Entry* currentEntry;
 
@@ -276,7 +277,8 @@ public:
 
     AuxiloryNode* getRoot();
     void setRoot(AuxiloryNode* root);
-
+	void* getMinKey();
+	void *getMaxKey();
 	RC serialize();
 	RC deserialize();
 	RC insertEntry(const void *key, const RID &rid);

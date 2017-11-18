@@ -244,7 +244,7 @@ RC RecordBasedFileManager::scan(FileHandle &fileHandle,
 	return 0;
 }
 
-int compare(const void* to, const void* from, const Attribute &attr, bool isNullBitsInTo, bool isNullBitsInFrom) {
+float compare(const void* to, const void* from, const Attribute &attr, bool isNullBitsInTo, bool isNullBitsInFrom) {
 	char * fromCursor = (char*) from;
 	char * toCursor = (char*) to;
 
@@ -261,11 +261,11 @@ int compare(const void* to, const void* from, const Attribute &attr, bool isNull
 	}
 
 	if(from == NULL) {
-		return 1;
+		return -1;
 	}
 
 	if(to == NULL) {
-		return -1;
+		return 1;
 	}
 
 	if (attr.type == TypeInt) {
