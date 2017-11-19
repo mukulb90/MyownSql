@@ -364,7 +364,7 @@ void* Graph::getMaxKey() {
     for (int i = 0; i < numberOfEntries-1; ++i) {
         entry = entry->getNextEntry();
     }
-    return entry->getKey();
+    return entry->data;
 }
 
 void* Graph::getMinKey() {
@@ -383,7 +383,7 @@ void* Graph::getMinKey() {
         node->getNodeType(nodeType);
     }
     Entry* entry = node->getFirstEntry();
-    return entry->getKey();
+    return entry->data;
 }
 
 AuxiloryNode* Graph::getRoot() {
@@ -572,22 +572,22 @@ RC Node::deleteEntry(Entry * deleteEntry) {
 	for (int i = 0; i < numberOfKeys; i++) {
 		int flag = 0;
 		if (*entry == *deleteEntry) {
+            int spaceShrinked = entry->getEntrySize();
+            char* cursor = (char*)entry->data;
 			entry = entry->getNextEntry();
 			for (int j = i; j < numberOfKeys; j++) {
-				memcpy((char*) entry->data - deleteEntry->getEntrySize(),
-						entry->data, entry->getEntrySize());
-				entry = entry->getNextEntry();
+                int shiftSize = entry->getEntrySize();
+				memcpy(cursor, entry->data, shiftSize);
+                cursor += shiftSize;
+				entry->data = (void*)((char*)entry->data+shiftSize);
 			}
-			flag = 1;
 			this->getFreeSpace(freeSpace);
-			this->setFreeSpace(freeSpace + deleteEntry->getEntrySize());
+			this->setFreeSpace(freeSpace + spaceShrinked);
 			this->setNumberOfKeys(numberOfKeys - 1);
+            return 0;
 		}
-		entry = entry->getNextEntry();
-		if (flag == 1) {
-			break;
-		}
-	}
+        entry = entry->getNextEntry();
+    }
 
 	return rc;
 }
@@ -873,7 +873,7 @@ RC Node::insertEntry(Entry* entry) {
 			void* buffer = malloc(shiftSize);
 			memcpy(buffer, cursor, shiftSize);
 			memcpy(cursor, entry->data, spaceRequiredByEntry);
-			cursor += nodeEntrySize;
+			cursor += spaceRequiredByEntry;
 			memcpy(cursor, buffer, shiftSize);
 			this->setNumberOfKeys(numberOfKeys + 1);
 			this->setFreeSpace(freeSpace - spaceRequiredByEntry);
@@ -951,7 +951,7 @@ RC LeafNode::split(Node* secondNode, AuxiloryEntry* &entryToBeInsertedInParent) 
 		}
 	}
 
-	void* key = secondNode->getFirstEntry()->getKey();
+	void* key = secondNode->getFirstEntry()->data;
 	AuxiloryEntry* parentEntry = AuxiloryEntry::parse(this->attr, key, secondNode->id);
 	entryToBeInsertedInParent = parentEntry;
     this->addAfter((LeafNode*)secondNode);
