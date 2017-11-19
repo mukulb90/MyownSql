@@ -420,8 +420,8 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 		LeafNode* leafNode = new LeafNode(this->attr, this->fileHandle);
 		leafNode->insertEntry(entry);
 		leafNode->serialize();
-		AuxiloryEntry * entry = AuxiloryEntry::parse(this->attr, key, leafNode->id);
-        node->insertEntry(entry);
+		AuxiloryEntry * auxEntry = AuxiloryEntry::parse(this->attr, key, leafNode->id);
+        node->insertEntry(auxEntry);
         node->serialize();
 		goto cleanup;
 	}
@@ -1042,26 +1042,26 @@ RC LeafNode::addBefore(LeafNode* node) {
 }
 
 bool operator <(Entry& entry, Entry& entry2) {
-	return compare(entry2.getKey(), entry.getKey(), entry.attr, false, false)
+	return compare(entry2.data, entry.data, entry.attr, false, false)
 			< 0;
 }
 
 bool operator <=(Entry& entry, Entry& entry2) {
-	return compare(entry2.getKey(), entry.getKey(), entry.attr, false, false)
+	return compare(entry2.data, entry.data, entry.attr, false, false)
 			<= 0;
 }
 bool operator >(Entry & entry, Entry & entry2) {
-	return compare(entry2.getKey(), entry.getKey(), entry.attr, false, false)
+	return compare(entry2.data, entry.data, entry.attr, false, false)
 			> 0;
 }
 
 bool operator >=(Entry & entry, Entry & entry2) {
-	return compare(entry2.getKey(), entry.getKey(), entry.attr, false, false)
+	return compare(entry2.data, entry.data, entry.attr, false, false)
 			>= 0;
 }
 
 bool operator ==(Entry & entry, Entry & entry2) {
-	return compare(entry2.getKey(), entry.getKey(), entry.attr, false, false)
+	return compare(entry2.data, entry.data, entry.attr, false, false)
 			== 0;
 }
 
@@ -1071,7 +1071,7 @@ LeafEntry::LeafEntry(void* data, Attribute &attribute) {
 }
 
 int LeafEntry::getEntrySize() {
-	return LeafEntry::getSize(this->attr, this->getKey());
+	return LeafEntry::getSize(this->attr, this->data);
 }
 
 int LeafEntry::getSpaceNeededToInsert() {
@@ -1079,6 +1079,12 @@ int LeafEntry::getSpaceNeededToInsert() {
 }
 
 void* LeafEntry::getKey() {
+    if(this->attr.type == TypeVarChar) {
+        string key;
+        VarcharParser* varcharParser = new VarcharParser(this->data);
+        varcharParser->unParse(key);
+        return (void*)key.c_str();
+    }
 	return this->data;
 }
 
@@ -1095,10 +1101,8 @@ string LeafEntry::toJson() {
 	} else if (attr.type == TypeReal) {
 		keyString = to_string(*((float*) key));
 	} else if (attr.type == TypeVarChar) {
-		VarcharParser* varchar = new VarcharParser(this->getKey());
-		varchar->unParse(keyString);
-		varchar->data = 0;
-	}
+        keyString = string((char*)this->getKey());
+    }
 	json += keyString + ":";
 	json += "(" + to_string(pageNum) + "," + to_string(slotNum) + ")";
 	json += "\"";
@@ -1130,7 +1134,7 @@ RC LeafEntry::unparse(Attribute &attr, void* key, int& pageNum, int& slotNum) {
 		varchar->unParse(keyString);
 		varchar->data = 0;
 		delete varchar;
-		memcpy(key, keyString.c_str(), keyString.size());
+		memcpy(key, keyString.c_str(), sizeof(int) + keyString.size());
 		cursor += sizeof(int);
 		cursor += keyString.size();
 		memcpy(&pageNum, cursor, sizeof(int));
@@ -1167,7 +1171,6 @@ LeafEntry* LeafEntry::parse(Attribute &attr, const void* key,
 
 		memcpy(cursor, varchar->data, sizeof(int) + keyString.size());
 		cursor += sizeof(int) + keyString.size();
-		delete varchar;
 
 		memcpy(cursor, &pageNum, sizeof(int));
 		cursor += sizeof(int);
@@ -1277,7 +1280,7 @@ int LeafEntry::getSize(Attribute &attr, const void* key) {
 		string keyString;
 		varchar->unParse(keyString);
 		size += sizeof(int) + keyString.size();
-		delete varchar;
+        varchar->data = 0;
 	}
 
 	size += sizeof(int) * 2;
@@ -1299,6 +1302,12 @@ void* AuxiloryEntry::getKey() {
 	if(this->data == NULL) {
 		return NULL;
 	}
+    if(this->attr.type == TypeVarChar) {
+        string key;
+        VarcharParser* varcharParser = new VarcharParser(this->data);
+        varcharParser->unParse(key);
+        return (void*)key.c_str();
+    }
 	return  cursor;
 }
 
@@ -1317,8 +1326,8 @@ AuxiloryEntry* AuxiloryEntry::parse(Attribute &attr, const void* key, const int 
 		VarcharParser* varchar = new VarcharParser((void*)key);
 		string stringKey;
 		varchar->unParse(stringKey);
-		memcpy(cursor, key, stringKey.size());
-		cursor += stringKey.size();
+		memcpy(cursor, key, sizeof(int) + stringKey.size());
+		cursor += sizeof(int) + stringKey.size();
 	}
 	memcpy(cursor, &rightPointer, sizeof(int));
 	return entry;
@@ -1338,8 +1347,8 @@ RC AuxiloryEntry::unparse(Attribute &attr, void* key,
 		VarcharParser* varcharParser = new VarcharParser(cursor);
 		string keyString;
 		varcharParser->unParse(keyString);
-		memcpy(key, cursor, sizeof(keyString.size()));
-		cursor += keyString.size();
+		memcpy(key, cursor, sizeof(int) + keyString.size());
+		cursor += sizeof(int) + keyString.size();
 	}
 
 	memcpy(&rightPointer, cursor, sizeof(int));
@@ -1360,7 +1369,7 @@ void AuxiloryEntry::setRightPointer(int &rightPointer) {
 		VarcharParser* varcharParser = new VarcharParser(cursor);
 		string keyString;
 		varcharParser->unParse(keyString);
-		cursor += keyString.size();
+		cursor += sizeof(int) + keyString.size();
 	}
 	memcpy(cursor, &rightPointer, sizeof(int));
 }
@@ -1382,7 +1391,7 @@ int AuxiloryEntry::getRightPointer() {
 		VarcharParser* varcharParser = new VarcharParser(cursor);
 		string keyString;
 		varcharParser->unParse(keyString);
-		cursor += keyString.size();
+		cursor += sizeof(int) + keyString.size();
 	}
 	memcpy(&rightPointer, cursor, sizeof(int));
 	return rightPointer;
@@ -1403,9 +1412,7 @@ string AuxiloryEntry::toJson() {
 	} else if (attr.type == TypeReal) {
 		keyString = to_string(*((float*) this->getKey()));
 	} else if (attr.type == TypeVarChar) {
-		VarcharParser* varchar = new VarcharParser(this->getKey());
-		varchar->unParse(keyString);
-		varchar->data = 0;
+        keyString = "\"" + string((char*)this->getKey()) + "\"";
 	}
 	jsonString = keyString;
 	return jsonString;

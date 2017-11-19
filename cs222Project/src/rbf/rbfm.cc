@@ -279,7 +279,9 @@ float compare(const void* to, const void* from, const Attribute &attr, bool isNu
 	} else {
 		int toLength = *((int*)toCursor);
 		toCursor += sizeof(int);
-		string fromString = string(fromCursor);
+        int fromLength = *(int*)fromCursor;
+        fromCursor += sizeof(int);
+		string fromString = string(fromCursor, fromLength);
 		string toString = string(toCursor, toLength);
 		return fromString.compare(toString);
 	}
