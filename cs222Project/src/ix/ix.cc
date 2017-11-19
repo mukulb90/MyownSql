@@ -273,8 +273,7 @@ RC IX_ScanIterator::close() {
 	if (this->ixfileHandle->fileHandle->file == 0) {
 		return -1;
 	}
-	return PagedFileManager::instance()->closeFile(
-			*this->ixfileHandle->fileHandle);
+	return 0;
 }
 
 IXFileHandle::IXFileHandle() {
@@ -866,7 +865,7 @@ RC Node::insertEntry(Entry* entry) {
 		} else {
 			nodeEntry = new LeafEntry(cursor, this->attr);
 		}
-		int nodeEntrySize = nodeEntry->getSpaceNeededToInsert();
+		int nodeEntrySize = nodeEntry->getEntrySize();
 
 		if (*nodeEntry > *entry) {
 			//			make space for new entry
