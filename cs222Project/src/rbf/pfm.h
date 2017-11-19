@@ -8,8 +8,10 @@
 #include <sstream>
 #include <iostream>
 #include <math.h>
+#include <unordered_map>
 
-#define FILE_HANDLE_SERIALIZATION_LOCATION  "access_stats.data";
+#define FILE_HANDLE_SERIALIZATION_LOCATION  "access_stats.data"
+#define PAGES_CACHE_SIZE 10
 
 using namespace std;
 
@@ -17,6 +19,20 @@ using namespace std;
 #include <climits>
 #define PAGE_SIZE 4096
 #define FORWARDER_SIZE 12
+
+template <class Value>
+class Cache {
+private:
+	int size;
+	unordered_map<int, Value> internal_cache;
+	int hashCode(int key);
+
+public:
+	Cache(int size);
+	Value get(int k);
+	int set(int k, Value &v);
+
+};
 
 using namespace std;
 
@@ -120,9 +136,11 @@ public :
 class Page: public Serializable {
 public:
 	void * data;
-
+    int id;
 	Page();
 	Page(void * data);
+    Page(void * data, int id);
+
 	~Page();
 
 	RecordForwarder* getRecord(const RID &rid);
@@ -180,6 +198,7 @@ public:
 	string name;
 	int numberOfPages;
 	FileHandle* handle;
+    Cache<Page*> * pagesCache;
 
 
 	PagedFile(string fileName);

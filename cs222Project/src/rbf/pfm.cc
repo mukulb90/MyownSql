@@ -101,7 +101,21 @@ FileHandle::~FileHandle() {
 }
 
 RC FileHandle::readPage(PageNum pageNum, void *data) {
-	return this->internalReadPage(pageNum, data, true);
+    Page* page = this->file->pagesCache->get(pageNum);
+    if(page == 0 || page->id != pageNum) {
+        int rc = this->internalReadPage(pageNum, data, true);
+        if(rc == 0) {
+            void * copyOfData = malloc(PAGE_SIZE);
+            memcpy(copyOfData, data, PAGE_SIZE);
+            Page* page = new Page(copyOfData, pageNum);
+            this->file->pagesCache->set(pageNum, page);
+        }
+        return rc;
+
+    } else {
+        memcpy(data, page->data, PAGE_SIZE);
+        return 0;
+    }
 }
 
 RC FileHandle::internalReadPage(PageNum pageNum, void *data, bool shouldAffectCounters) {
@@ -128,25 +142,27 @@ RC FileHandle::writePage(PageNum pageNum, const void *data) {
 	if(pageNum >= this->file->numberOfPages) {
 		return -1;
 	}
-	Page * page = new Page((void*)data);
+    void * copyOfData = malloc(PAGE_SIZE);
+    memcpy(copyOfData, data, PAGE_SIZE);
+    Page* page = new Page(copyOfData, pageNum);
 	page->serializeToOffset(this->file->name, this->file->getPageStartOffsetByIndex(pageNum), PAGE_SIZE);
-	page->data=0;
-	delete page;
 	this->writePageCounter++;
 	string path = FILE_HANDLE_SERIALIZATION_LOCATION;
 	this->serialize(path);
+    this->file->pagesCache->set(page->id, page);
 	return 0;
 }
 
 
 RC FileHandle::appendPage(const void *data) {
 
-	Page * newPage = new Page((void*)data);
+    void * copyOfData = malloc(PAGE_SIZE);
+    memcpy(copyOfData, data, PAGE_SIZE);
+    Page* newPage = new Page(copyOfData, this->file->numberOfPages);
+    this->file->pagesCache->set(newPage->id, newPage);
 	this->file->numberOfPages++;
 	newPage->serializeToOffset(this->file->name,this->file->getPageStartOffsetByIndex(this->file->numberOfPages-1) , PAGE_SIZE);
 	this->file->serializeToOffset(this->file->name, 0, PAGE_SIZE);
-		newPage->data=0;
-		delete newPage;
 	this->appendPageCounter++;
 	string path = FILE_HANDLE_SERIALIZATION_LOCATION;
 	this->serialize(path);
@@ -292,6 +308,11 @@ Page::Page() {
 
 Page::Page(void * data) {
 	this->data = data;
+}
+
+Page::Page(void* data, int id) {
+    this->data = data;
+    this->id = id;
 }
 
 Page::~Page() {
@@ -496,6 +517,7 @@ PagedFile::PagedFile(string fileName) {
 	this->name = fileName;
 	this->numberOfPages = 0;
 	this->handle = 0;
+    this->pagesCache = new Cache<Page*>(PAGES_CACHE_SIZE);
 }
 
 
@@ -508,12 +530,16 @@ int PagedFile::setFileHandle(FileHandle *fileHandle) {
 }
 
 Page* PagedFile::getPageByIndex(int index) {
+    if(this->pagesCache->get(index) != 0) {
+        return this->pagesCache->get(index);
+    }
 	if(index >= this->getNumberOfPages()) {
 		return 0;
 	}
 	Page* page = new Page();
 	page->deserializeToOffset(this->name, this->getPageStartOffsetByIndex(index), PAGE_SIZE);
 	this->handle->readPageCounter++;
+    this->pagesCache->set(index, page);
 	return page;
 }
 
@@ -931,4 +957,29 @@ RC VarcharParser::unParse(string &str){
 	return 0;
 };
 
+template<class Value>
+Cache<Value>::Cache(int size) {
+	this->size = size;
+	this->internal_cache = unordered_map<int, Value>();
+}
 
+template<class Value>
+int Cache<Value>::hashCode(int key){
+	return key%(this->size);
+}
+
+template<class Value>
+Value Cache<Value>::get(int k) {
+	int offset = this->hashCode(k);
+	if(this->internal_cache.find(offset) != this->internal_cache.end()) {
+        return this->internal_cache[offset];
+    }
+    return 0;
+}
+
+template<class Value>
+int Cache<Value>::set(int k, Value &v) {
+	int offset = this->hashCode(k);
+	this->internal_cache[offset] = v;
+	return 0;
+}
