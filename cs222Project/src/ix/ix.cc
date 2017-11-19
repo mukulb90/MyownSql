@@ -971,7 +971,7 @@ RC AuxiloryNode::split(Node* secondNode, AuxiloryEntry* &entryToBeInsertedInPare
 			if(is_first_redistribution) {
 				is_first_redistribution = false;
 				secondAuxiloryNode->setLeftPointer(entry->getRightPointer());
-				entryToBeInsertedInParent = AuxiloryEntry::parse(this->attr, entry->getKey(), secondAuxiloryNode->id);
+				entryToBeInsertedInParent = AuxiloryEntry::parse(this->attr, entry->data, secondAuxiloryNode->id);
 			} else {
 				secondNode->insertEntry(entry);
 				this->deleteEntry(entry);
@@ -1077,12 +1077,12 @@ int LeafEntry::getSpaceNeededToInsert() {
 	return this->getEntrySize();
 }
 
-void* LeafEntry::getKey() {
+const void* LeafEntry::getKey() {
     if(this->attr.type == TypeVarChar) {
         string key;
         VarcharParser* varcharParser = new VarcharParser(this->data);
         varcharParser->unParse(key);
-        return (void*)key.c_str();
+        return (const void *)key.c_str();
     }
 	return this->data;
 }
@@ -1093,14 +1093,16 @@ string LeafEntry::toJson() {
 	string json = "";
 	json += "\"";
 	this->unparse(this->attr, key, pageNum, slotNum);
-	string keyString = "";
+	string keyString;
 	if (attr.type == TypeInt) {
 		keyString = to_string(*((int*) key));
 
 	} else if (attr.type == TypeReal) {
 		keyString = to_string(*((float*) key));
 	} else if (attr.type == TypeVarChar) {
-        keyString = string((char*)this->getKey());
+        string key;
+        VarcharParser* vp = new VarcharParser(this->data);
+        vp->unParse(keyString);
     }
 	json += keyString + ":";
 	json += "(" + to_string(pageNum) + "," + to_string(slotNum) + ")";
@@ -1296,7 +1298,7 @@ AuxiloryEntry::AuxiloryEntry(void* data, Attribute & attr) {
 	this->attr = attr;
 }
 
-void* AuxiloryEntry::getKey() {
+const void* AuxiloryEntry::getKey() {
 	char * cursor = (char *)this->data;
 	if(this->data == NULL) {
 		return NULL;
@@ -1411,7 +1413,10 @@ string AuxiloryEntry::toJson() {
 	} else if (attr.type == TypeReal) {
 		keyString = to_string(*((float*) this->getKey()));
 	} else if (attr.type == TypeVarChar) {
-        keyString = "\"" + string((char*)this->getKey()) + "\"";
+        string key;
+        VarcharParser* vp = new VarcharParser(this->data);
+        vp->unParse(key);
+        keyString = "\"" + key + "\"";
 	}
 	jsonString = keyString;
 	return jsonString;

@@ -116,7 +116,7 @@ public:
 	void* data;
 	Attribute attr;
 
-	virtual void* getKey() = 0;
+	virtual const void* getKey() = 0;
 	virtual int getEntrySize() = 0;
 	virtual int getSpaceNeededToInsert() = 0;
 
@@ -137,7 +137,7 @@ class LeafEntry: public Entry {
 public:
 
 	LeafEntry(void* data, Attribute &attr);
-	void* getKey();
+	const void* getKey();
 	int getEntrySize();
 	int getSpaceNeededToInsert();
 
@@ -158,7 +158,7 @@ class AuxiloryEntry: public Entry {
 public:
 	AuxiloryEntry(void* data, Attribute &attr);
 
-	void* getKey();
+	const void* getKey();
 	int getEntrySize();
 	int getSpaceNeededToInsert();
 	Entry* getNextEntry();
