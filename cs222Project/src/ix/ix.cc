@@ -106,7 +106,7 @@ RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle,
 	if (rc != 0) {
 		return rc;
 	}
-	rc = graph->deleteKey(key);
+	rc = graph->deleteKey(key, rid);
 	if (rc == 0) {
 		ixfileHandle.ixWritePageCounter++;
 	}
@@ -144,18 +144,16 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle, const Attribute &attribute,
 		delete graph;
 		return rc;
 	}
-
-
     if(lowKey == NULL) {
-        ix_ScanIterator.lowKeyEntry = LeafEntry::parse(graph->attr, graph->getMinKey(), 0, 0);
+        ix_ScanIterator.lowKeyEntry = new LeafEntry(graph->getMinKey(), ix_ScanIterator.attribute);
     } else {
         ix_ScanIterator.lowKeyEntry = LeafEntry::parse(graph->attr, lowKey, 0, 0);
     }
 
     if(highKey == NULL) {
-        ix_ScanIterator.highKeyEntry = LeafEntry::parse(graph->attr, graph->getMaxKey(), 0, 0);
+        ix_ScanIterator.highKeyEntry = new LeafEntry(graph->getMaxKey(), ix_ScanIterator.attribute);
     } else {
-        ix_ScanIterator.highKeyEntry = LeafEntry::parse(graph->attr, highKey, 0, 0);
+        ix_ScanIterator.highKeyEntry = LeafEntry::parse(graph->attr, highKey, INT_MAX, INT_MAX);
     }
 
 	Node* node = graph->getRoot();
@@ -164,7 +162,7 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle, const Attribute &attribute,
 	node->getNodeType(nodeType);
 	while (nodeType != LEAF) {
 		AuxiloryNode* auxNode = (AuxiloryNode*) node;
-		auxNode->search(lowKey, node);
+		auxNode->search(ix_ScanIterator.lowKeyEntry, node);
 		node->getNodeType(nodeType);
 	}
     nextNode = node;
@@ -182,7 +180,13 @@ void IndexManager::printBtree(IXFileHandle &ixfileHandle,
 	Graph *graph = new Graph(fileHandle, attribute);
 	int rc = graph->deserialize();
 	Node* node = graph->getRoot();
-	cout << ((AuxiloryNode*) node)->toJson() << endl;
+    NodeType nodeType;
+    node->getNodeType(nodeType);
+    if(nodeType == LEAF) {
+        cout << ((LeafNode*) node)->toJson() << endl;
+    } else {
+        cout << ((AuxiloryNode*) node)->toJson() << endl;
+    }
 	delete graph;
 }
 
@@ -309,7 +313,7 @@ Graph* Graph::instance(const FileHandle &fileHandle) {
 	AuxiloryNode* internalRoot = new AuxiloryNode(0, fileHandle);
     internalRoot->serialize();
     internalRoot->setNumberOfKeys(0);
-    AuxiloryNode* root = new AuxiloryNode(1, fileHandle);
+    LeafNode* root = new LeafNode(1, fileHandle);
     root->setNumberOfKeys(0);
     root->serialize();
     internalRoot->setLeftPointer(1);
@@ -386,10 +390,10 @@ void* Graph::getMinKey() {
     return entry->data;
 }
 
-AuxiloryNode* Graph::getRoot() {
+Node* Graph::getRoot() {
 	int leftPointer;
 	leftPointer = this->internalRoot->getLeftPointer();
-	AuxiloryNode* root = new AuxiloryNode(leftPointer, this->attr, this->fileHandle);
+	Node* root = Node::getInstance(leftPointer, this->attr, this->fileHandle);
     root->deserialize();
     return root;
 }
@@ -416,12 +420,9 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 	node->getNumberOfKeys(numberOfKeys);
 	if (numberOfKeys == 0) {
 //		Initialize graph with one root and one leaf Node
-		LeafNode* leafNode = new LeafNode(this->attr, this->fileHandle);
+		LeafNode* leafNode = (LeafNode*)node;
 		leafNode->insertEntry(entry);
 		leafNode->serialize();
-		AuxiloryEntry * auxEntry = AuxiloryEntry::parse(this->attr, key, leafNode->id);
-        node->insertEntry(auxEntry);
-        node->serialize();
 		goto cleanup;
 	}
 
@@ -430,7 +431,7 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 		AuxiloryNode* auxiloryNode = (AuxiloryNode*) node;
         visitedNodes.push(node);
         visitedEntries.push(parentEntry);
-		parentEntry = auxiloryNode->search(key, node);
+		parentEntry = auxiloryNode->search(entry, node);
 		if (node == NULL) {
 			break;
 		}
@@ -540,26 +541,27 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 }
 
 
-RC Graph::deleteKey(const void * key) {
+RC Graph::deleteKey(const void * key, const RID &rid) {
 	int rc = 0;
 	NodeType nodeType;
 	Node* node = this->getRoot();
 	Entry* parentEntry = 0;
 	node->getNodeType(nodeType);
-
+	LeafEntry *deleteEntry = LeafEntry::parse(this->attr, key, rid.pageNum, rid.slotNum);
 	while (nodeType != LEAF) {
 		AuxiloryNode* auxiloryNode = (AuxiloryNode*) node;
-		parentEntry = auxiloryNode->search(key, node);
-		if (node == NULL) {
-			cout << "Entry could not be found" << endl;
-			rc = -1;
-		}
+		parentEntry = auxiloryNode->search(deleteEntry, node);
+        node->getNodeType(nodeType);
+    }
+
+    if (node == NULL) {
+        cout << "Entry could not be found" << endl;
+        rc = -1;
+    }
 		node->getNodeType(nodeType);
-		LeafEntry *deleteEntry = new LeafEntry((void*) key, this->attr);
 		rc = ((LeafNode*) node)->deleteEntry(deleteEntry);
         node->serialize();
 		return rc;
-	}
 }
 
 RC Node::deleteEntry(Entry * deleteEntry) {
@@ -717,9 +719,8 @@ RC Node::setFreeSpace(const int &freeSpace) {
 	return 0;
 }
 
-Entry* AuxiloryNode::search(const void * key, Node* &nextNode) {
-	char* cursor = (char*) this->data;
-	cursor += this->getMetaDataSize();
+Entry* AuxiloryNode::search(Entry* entry, Node* &nextNode) {
+	int pageNum, slotNum; // Caution: do not use these
 	void* tempKey = malloc(this->attr.length+sizeof(int));
 	Entry* parentEntry = 0;
 	int numberOfKeys, nextPointer = INVALID_POINTER, leftPointer, rightPointer;
@@ -728,11 +729,11 @@ Entry* AuxiloryNode::search(const void * key, Node* &nextNode) {
 		nextNode = NULL;
 		return parentEntry;
 	}
-	Entry* searchEntry = new AuxiloryEntry((void*) key, this->attr);
-	Entry* firstEntry = new AuxiloryEntry(cursor, this->attr);
+	Entry* searchEntry = entry;
+	Entry* firstEntry = this->getFirstEntry();
 
 	for (int i = 0; i < numberOfKeys; i++) {
-		((AuxiloryEntry*)firstEntry)->unparse(this->attr, tempKey, rightPointer);
+		((AuxiloryEntry*)firstEntry)->unparse(this->attr, tempKey, pageNum, slotNum, rightPointer);
 		parentEntry = firstEntry;
 		leftPointer = ((AuxiloryEntry*)firstEntry)->getLeftPointer();
         if(searchEntry->getKey() == NULL) {
@@ -770,6 +771,7 @@ Entry* AuxiloryNode::search(const void * key, Node* &nextNode) {
 string AuxiloryNode::toJson() {
 	void* tempdata = malloc(this->attr.length+sizeof(int));
 	int leftPointer, rightPointer;
+	int pageNum, slotNum;
 	string jsonString = "{";
 	jsonString += "\"keys\":[";
 	char* cursor = (char*) this->data;
@@ -789,7 +791,7 @@ string AuxiloryNode::toJson() {
         if(i != numberOfKeys-1) {
             jsonString += ",";
         }
-		entry->unparse(this->attr, tempdata, rightPointer);
+		entry->unparse(this->attr, tempdata, pageNum, slotNum, rightPointer);
 		entry = (AuxiloryEntry*) entry->getNextEntry();
 		if (unique_children.find(rightPointer) == unique_children.end()) {
 			children.push_back(rightPointer);
@@ -893,6 +895,13 @@ RC Node::insertEntry(Entry* entry) {
 	return 0;
 }
 
+LeafNode::LeafNode(int id, FileHandle const& fileHandle) :
+        Node(id, fileHandle) {
+    this->setNodeType(LEAF);
+    this->setRightSibling(-1);
+    this->setLeftSibling(-1);
+}
+
 LeafNode::LeafNode(Attribute const &attr, FileHandle const& fileHandle) :
 		Node(fileHandle.file->numberOfPages, attr, fileHandle) {
 	this->setNodeType(LEAF);
@@ -954,8 +963,12 @@ RC LeafNode::split(Node* secondNode, AuxiloryEntry* &entryToBeInsertedInParent) 
 		}
 	}
 
-	void* key = secondNode->getFirstEntry()->data;
-	AuxiloryEntry* parentEntry = AuxiloryEntry::parse(this->attr, key, secondNode->id);
+	LeafEntry* leafEntry = (LeafEntry*)secondNode->getFirstEntry();
+	void* key = malloc(this->attr.length+4);
+	int pageNum, slotNum;
+	Attribute attr = this->attr;
+	leafEntry->unparse(attr, key, pageNum, slotNum);
+	AuxiloryEntry* parentEntry = AuxiloryEntry::parse(this->attr, key, pageNum, slotNum, secondNode->id);
 	entryToBeInsertedInParent = parentEntry;
     this->addAfter((LeafNode*)secondNode);
 	return 0;
@@ -974,7 +987,11 @@ RC AuxiloryNode::split(Node* secondNode, AuxiloryEntry* &entryToBeInsertedInPare
 			if(is_first_redistribution) {
 				is_first_redistribution = false;
 				secondAuxiloryNode->setLeftPointer(entry->getRightPointer());
-				entryToBeInsertedInParent = AuxiloryEntry::parse(this->attr, entry->data, secondAuxiloryNode->id);
+				int pageNum, slotNum;
+				void* key = malloc(this->attr.length+4);
+				int rightPointer;
+				entry->unparse(this->attr, key, pageNum, slotNum, rightPointer);
+				entryToBeInsertedInParent = AuxiloryEntry::parse(this->attr, key, pageNum, slotNum, secondAuxiloryNode->id);
                 this->deleteEntry(entry);
             } else {
 				secondNode->insertEntry(entry);
@@ -1040,27 +1057,58 @@ RC LeafNode::addBefore(LeafNode* node) {
 }
 
 bool operator <(Entry& entry, Entry& entry2) {
-	return compare(entry2.data, entry.data, entry.attr, false, false)
-			< 0;
+    float diffKey = compare(entry2.data, entry.data, entry.attr, false, false);
+    if(diffKey == 0) {
+	 diffKey =   entry.getPageNum() - entry2.getPageNum();
+	 if(diffKey == 0) {
+		 diffKey = entry.getSlotNum() - entry2.getSlotNum();
+	 }
+    }
+    return diffKey < 0;
 }
 
 bool operator <=(Entry& entry, Entry& entry2) {
-	return compare(entry2.data, entry.data, entry.attr, false, false)
-			<= 0;
+    float diffKey = compare(entry2.data, entry.data, entry.attr, false, false);
+    if(diffKey == 0) {
+        diffKey =   entry.getPageNum() - entry2.getPageNum();
+        if(diffKey == 0) {
+            diffKey = entry.getSlotNum() - entry2.getSlotNum();
+        }
+    }
+	return diffKey <= 0;
 }
+
 bool operator >(Entry & entry, Entry & entry2) {
-	return compare(entry2.data, entry.data, entry.attr, false, false)
-			> 0;
+    float diffKey = compare(entry2.data, entry.data, entry.attr, false, false);
+    if(diffKey == 0) {
+        diffKey =   entry.getPageNum() - entry2.getPageNum();
+        if(diffKey == 0) {
+            diffKey = entry.getSlotNum() - entry2.getSlotNum();
+        }
+    }
+    return diffKey > 0;
 }
 
 bool operator >=(Entry & entry, Entry & entry2) {
-	return compare(entry2.data, entry.data, entry.attr, false, false)
-			>= 0;
+    float diffKey = compare(entry2.data, entry.data, entry.attr, false, false);
+    if(diffKey == 0) {
+        diffKey =   entry.getPageNum() - entry2.getPageNum();
+        if(diffKey == 0) {
+            diffKey = entry.getSlotNum() - entry2.getSlotNum();
+        }
+    }
+    return diffKey >= 0;
 }
 
 bool operator ==(Entry & entry, Entry & entry2) {
-	return compare(entry2.data, entry.data, entry.attr, false, false)
-			== 0;
+    float diffKey = compare(entry2.data, entry.data, entry.attr, false, false);
+    if(diffKey == 0) {
+        diffKey =   entry.getPageNum() - entry2.getPageNum();
+        if(diffKey == 0) {
+            diffKey = entry.getSlotNum() - entry2.getSlotNum();
+        }
+    }
+    return diffKey == 0;
 }
 
 LeafEntry::LeafEntry(void* data, Attribute &attribute) {
@@ -1312,10 +1360,10 @@ const void* AuxiloryEntry::getKey() {
 }
 
 int AuxiloryEntry::getEntrySize() {
-	return (new LeafEntry(this->data, this->attr))->getEntrySize() - sizeof(int);
+	return (new LeafEntry(this->data, this->attr))->getEntrySize() + sizeof(int);
 }
 
-AuxiloryEntry* AuxiloryEntry::parse(Attribute &attr, const void* key, const int &rightPointer) {
+AuxiloryEntry* AuxiloryEntry::parse(Attribute &attr, const void* key, const int pageNum, const int slotNum, const int &rightPointer) {
 	void * data = malloc(AuxiloryEntry::getSize(attr, (void*)key));
 	AuxiloryEntry* entry = new AuxiloryEntry(data, attr);
 	char* cursor = (char*) entry->data;
@@ -1329,15 +1377,22 @@ AuxiloryEntry* AuxiloryEntry::parse(Attribute &attr, const void* key, const int 
 		memcpy(cursor, key, sizeof(int) + stringKey.size());
 		cursor += sizeof(int) + stringKey.size();
 	}
+    memcpy(cursor, &pageNum, sizeof(int));
+    cursor += sizeof(int);
+
+    memcpy(cursor, &slotNum, sizeof(int));
+    cursor += sizeof(int);
+
 	memcpy(cursor, &rightPointer, sizeof(int));
+
 	return entry;
 }
 
 int AuxiloryEntry::getSize(Attribute &attr, void* key) {
-	return LeafEntry::getSize(attr, key) - sizeof(int);
+	return LeafEntry::getSize(attr, key) + sizeof(int);
 }
 
-RC AuxiloryEntry::unparse(Attribute &attr, void* key,
+RC AuxiloryEntry::unparse(Attribute &attr, void* key, int &pageNum, int &slotNum,
 		int &rightPointer) {
 	char * cursor = (char*)this->data;
 	if(attr.type == TypeInt || attr.type == TypeReal) {
@@ -1350,6 +1405,11 @@ RC AuxiloryEntry::unparse(Attribute &attr, void* key,
 		memcpy(key, cursor, sizeof(int) + keyString.size());
 		cursor += sizeof(int) + keyString.size();
 	}
+	memcpy(&pageNum, cursor, sizeof(int));
+	cursor += sizeof(int);
+
+	memcpy(&slotNum, cursor, sizeof(int));
+	cursor += sizeof(int);
 
 	memcpy(&rightPointer, cursor, sizeof(int));
 	return 0;
@@ -1371,6 +1431,7 @@ void AuxiloryEntry::setRightPointer(int &rightPointer) {
 		varcharParser->unParse(keyString);
 		cursor += sizeof(int) + keyString.size();
 	}
+	cursor += 2*sizeof(int);
 	memcpy(cursor, &rightPointer, sizeof(int));
 }
 
@@ -1393,6 +1454,7 @@ int AuxiloryEntry::getRightPointer() {
 		varcharParser->unParse(keyString);
 		cursor += sizeof(int) + keyString.size();
 	}
+	cursor += 2*sizeof(int);
 	memcpy(&rightPointer, cursor, sizeof(int));
 	return rightPointer;
 }
@@ -1406,23 +1468,63 @@ Entry* AuxiloryEntry::getNextEntry() {
 string AuxiloryEntry::toJson() {
 	string jsonString = "";
 	string keyString = "";
+    char* cursor = (char*)this->data;
+    int pageNum, slotNum;
 	if (attr.type == TypeInt) {
 		keyString = to_string(*((int*) this->getKey()));
-
+        cursor += sizeof(int);
 	} else if (attr.type == TypeReal) {
 		keyString = to_string(*((float*) this->getKey()));
+        cursor += sizeof(float);
 	} else if (attr.type == TypeVarChar) {
         string key;
         VarcharParser* vp = new VarcharParser(this->data);
         vp->unParse(key);
-        keyString = "\"" + key + "\"";
+        cursor += sizeof(int) + key.size();
+        keyString = key;
 	}
-	jsonString = keyString;
+    memcpy(&pageNum, cursor, sizeof(int));
+    cursor += sizeof(int);
+
+    memcpy(&slotNum, cursor, sizeof(int));
+    cursor += sizeof(int);
+
+	jsonString = "\""+ keyString + ":("+ to_string(pageNum) +", "+ to_string(slotNum)+ ")"+ + "\"";
 	return jsonString;
 }
 
 
 int AuxiloryEntry::getSpaceNeededToInsert() {
 	return this->getEntrySize();
+}
+
+int Entry::getSlotNum() {
+    int *slotNum = (int*)malloc(sizeof(int));
+    char* cursor = (char*)this->data;
+    if(this->attr.type == TypeInt || this->attr.type == TypeReal) {
+        cursor += sizeof(int);
+    } else {
+        int length = *((int*)cursor);
+        cursor += sizeof(int);
+        cursor += length;
+    }
+    cursor += sizeof(int);
+    memcpy(slotNum, cursor, sizeof(int));
+    return *slotNum;
+}
+
+int Entry::getPageNum() {
+    int *pageNum = (int*)malloc(sizeof(int));
+    char* cursor = (char*)this->data;
+    if(this->attr.type == TypeInt || this->attr.type == TypeReal) {
+        cursor += sizeof(int);
+    } else {
+        int length = *((int*)cursor);
+        cursor += sizeof(int);
+        cursor += length;
+    }
+    memcpy(pageNum, cursor, sizeof(int));
+    return *pageNum;
+
 }
 

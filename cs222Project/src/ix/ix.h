@@ -119,6 +119,8 @@ public:
 	virtual const void* getKey() = 0;
 	virtual int getEntrySize() = 0;
 	virtual int getSpaceNeededToInsert() = 0;
+    int getPageNum();
+    int getSlotNum();
 
 	friend bool operator <(Entry& entry, Entry& entry2);
 	friend bool operator <=(Entry& entry, Entry& entry2);
@@ -163,9 +165,9 @@ public:
 	int getSpaceNeededToInsert();
 	Entry* getNextEntry();
 
-	static AuxiloryEntry* parse(Attribute &attr,const void* key, const int &rightPointer);
+	static AuxiloryEntry* parse(Attribute &attr,const void* key,const int pageNum,const int slotNum, const int &rightPointer);
 	static int getSize(Attribute &attr, void* key);
-	RC unparse(Attribute &attr, void* key, int &rightPointer);
+	RC unparse(Attribute &attr, void* key, int &pageNum, int &slotNum, int &rightPointer);
 	string toJson();
 
 	void setRightPointer(int &rightPointer);
@@ -221,6 +223,7 @@ public:
 class LeafNode: public Node {
 
 public:
+	LeafNode(int id, const FileHandle &fileHandle);
 	LeafNode(const Attribute &attr, const FileHandle &fileHandle);
 	LeafNode(const int &id, const Attribute &attr, const FileHandle &fileHandle);
 	~LeafNode();
@@ -254,7 +257,7 @@ public:
 
 	RC split(Node* secondNode, AuxiloryEntry* &entryPointingToBothNodes);
 
-	Entry* search(const void * key, Node* &nextNode);
+	Entry* search(Entry * searchEntry, Node* &nextNode);
 //	RC deleteEntry(Entry* entry);
 	string toJson();
 	int getLeftPointer();
@@ -275,14 +278,14 @@ public:
 	static Graph* instance(const FileHandle &fileHandle);
 	static Graph* instance(const FileHandle &fileHandle, const Attribute &attr);
 
-    AuxiloryNode* getRoot();
+    Node* getRoot();
     void setRoot(AuxiloryNode* root);
 	void* getMinKey();
 	void *getMaxKey();
 	RC serialize();
 	RC deserialize();
 	RC insertEntry(const void *key, const RID &rid);
-	RC deleteKey(const void *key);
+	RC deleteKey(const void *key, const RID &rid);
 };
 
 #endif
