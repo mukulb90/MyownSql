@@ -8,6 +8,7 @@
 #include <string.h>
 #include <math.h>
 #include <iostream>
+#include <unordered_map>
 
 #include <vector>
 
@@ -18,6 +19,23 @@ void freeIfNotNull(void * data){
 		free(data);
 		data = 0 ;
 	}
+}
+
+unordered_map<string, FILE*> map;
+
+FILE* getFileHandle(const string &fileName,string mode){
+    string key = fileName + "-" + mode;
+    if(map.find(key) != map.end()) {
+//        cout << "Cache Hit" << endl;
+        return map[key];
+    } else {
+//        cout << "Cache MISS" << endl;
+        FILE* file = fopen(fileName.c_str(), mode.c_str());
+        if(file != NULL) {
+            map[key] = file;
+        }
+        return file;
+    }
 }
 
 bool operator==(const RID& rid1, const RID& rid2){
@@ -64,11 +82,12 @@ RC PagedFileManager::openFile(const string &fileName, FileHandle &fileHandle) {
 	if (!fileExists(fileName)) {
 		return -1;
 	}
-	FILE * handle = fopen(fileName.c_str(), "rb");
+    string mode = "rb+";
+	FILE * handle = getFileHandle(fileName, mode);
 	if (!handle) {
 		return -1;
 	}
-	fclose(handle);
+//	fclose(handle);
 	PagedFile* file = new PagedFile(fileName);
 	file->deserialize(fileName);
 	if(strcmp(file->name.c_str(), fileName.c_str()) != 0) {
@@ -227,17 +246,21 @@ int Serializable::deserializeToOffset(string fileName, int startOffset, int bloc
 	}
 	void* buffer = malloc(size);
 	FILE* handle;
+    string mode;
 	if(startOffset != -1) {
-		handle=fopen(fileName.c_str(), "rb+");
+        mode = "rb+";
+		handle=getFileHandle(fileName, mode);
 		fseek(handle, startOffset, SEEK_SET);
 	}
 	else {
-		handle=fopen(fileName.c_str(), "rb");
-	}
+        mode = "rb+";
+		handle=getFileHandle(fileName, mode);
+        fseek(handle, 0, SEEK_SET);
+    }
 	fread(buffer, size, 1, handle);
 	this->mapToObject(buffer);
 	free(buffer);
-	fclose(handle);
+//	fclose(handle);
 	return 0;
 }
 
@@ -251,21 +274,27 @@ int Serializable::serializeToOffset(string fileName,  int startOffset=-1, int bl
 	void* buffer = malloc(memory);
 	this->mapFromObject(buffer);
 	FILE* handle;
+    string mode;
 	if(startOffset != -1) {
-		handle=fopen(fileName.c_str(), "rb+");
+        mode = "rb+";
+		handle=getFileHandle(fileName, mode);
 		fseek(handle, startOffset, SEEK_SET);
 	}
 	else {
-		handle=fopen(fileName.c_str(), "wb");
-	}
+        mode  = "wb";
+		handle=getFileHandle(fileName, mode);
+        fseek(handle, 0, SEEK_SET);
+    }
 	fwrite(buffer, memory, 1, handle);
 	free(buffer);
-	fclose(handle);
+    fflush(handle);
+//	fclose(handle);
 	return 0;
 }
 
 bool fileExists(string fileName) {
-	FILE* handle = fopen(fileName.c_str(), "rb");
+    string mode = "rb+";
+	FILE* handle = fopen(fileName.c_str(), mode.c_str());
 	bool exists = handle != 0;
 	if(exists) {
 		fclose(handle);
@@ -277,10 +306,11 @@ unsigned long fsize(char * fileName) {
 	if(!fileExists(fileName)) {
 		return 0;
 	}
-	FILE* f = fopen(fileName, "rb");
+    string mode = "rb+";
+	FILE* f = getFileHandle(fileName, mode);
 	fseek(f, 0, SEEK_END);
 	unsigned long len = (unsigned long) ftell(f);
-	fclose(f);
+//	fclose(f);
 	return len;
 }
 
@@ -930,5 +960,3 @@ RC VarcharParser::unParse(string &str){
 	str = string(cursor, length);
 	return 0;
 };
-
-
