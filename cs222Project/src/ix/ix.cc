@@ -1134,7 +1134,7 @@ RC LeafEntry::unparse(Attribute &attr, void* key, int& pageNum, int& slotNum) {
 		varchar->unParse(keyString);
 		varchar->data = 0;
 		delete varchar;
-		memcpy(key, keyString.c_str(), sizeof(int) + keyString.size());
+		memcpy(key, cursor, sizeof(int) + keyString.size());
 		cursor += sizeof(int);
 		cursor += keyString.size();
 		memcpy(&pageNum, cursor, sizeof(int));

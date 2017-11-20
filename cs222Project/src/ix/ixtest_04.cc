@@ -45,13 +45,9 @@ int testCase_4(const string &indexFileName, const Attribute &attribute)
 
     cerr << "Before DeleteEntry - R W A: " << readPageCount << " " << writePageCount << " " << appendPageCount << endl;
 
-    cout << endl;
-
     // delete entry
     rc = indexManager->deleteEntry(ixfileHandle, attribute, &key, rid);
     assert(rc == success && "indexManager::deleteEntry() should not fail.");
-
-
 
     rc = ixfileHandle.collectCounterValues(readPageCountAfter, writePageCountAfter, appendPageCountAfter);
     assert(rc == success && "indexManager::collectCounterValues() should not fail.");
@@ -70,11 +66,10 @@ int testCase_4(const string &indexFileName, const Attribute &attribute)
         rc = indexManager->closeFile(ixfileHandle);
         return fail;
     }
+    
     // delete entry again - should fail
     rc = indexManager->deleteEntry(ixfileHandle, attribute, &key, rid);
     assert(rc != success && "indexManager::deleteEntry() should fail.");
-    cout << endl;
-
 
     // close index file
     rc = indexManager->closeFile(ixfileHandle);
