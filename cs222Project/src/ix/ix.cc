@@ -496,6 +496,8 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 						this->fileHandle);
 				leftSibling->deserialize();
 				leftSibling->addAfter((LeafNode*)node);
+				leftSibling->serialize();
+				node->serialize();
 
 			} else {
 				parentAuxiloryEntry->setLeftPointer(node->id);
@@ -503,7 +505,8 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 				LeafNode* rightSibling = new LeafNode(rightNodeId, this->attr, this->fileHandle);
 				rightSibling->deserialize();
 				rightSibling->addBefore((LeafNode*)node);
-
+				rightSibling->serialize();
+				node->serialize();
 			}
 			Node* parent = visitedNodes.top();
 			visitedNodes.pop();
@@ -554,7 +557,7 @@ RC Graph::deleteKey(const void * key) {
 		node->getNodeType(nodeType);
 		LeafEntry *deleteEntry = new LeafEntry((void*) key, this->attr);
 		rc = ((LeafNode*) node)->deleteEntry(deleteEntry);
-		(LeafNode*) node->serialize();
+        node->serialize();
 		return rc;
 	}
 }
@@ -1019,8 +1022,6 @@ RC LeafNode::addAfter(LeafNode* node) {
 	thirdNode->deserialize();
 	thirdNode->setLeftSibling((short)node->id);
 	node->setLeftSibling((short)this->id);
-	this->serialize();
-	node->serialize();
 	thirdNode->serialize();
 	return 0;
 }
@@ -1035,8 +1036,6 @@ RC LeafNode::addBefore(LeafNode* node) {
 	previousNode->setRightSibling((short)node->id);
 	node->setRightSibling((short)this->id);
 	previousNode->serialize();
-	node->serialize();
-	this->serialize();
 	return 0;
 }
 
