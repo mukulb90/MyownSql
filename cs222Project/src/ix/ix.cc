@@ -1103,7 +1103,6 @@ string LeafEntry::toJson() {
         string key;
         VarcharParser* vp = new VarcharParser(this->data);
         vp->unParse(keyString);
-        keyString = string(&keyString.at(0), 1);
     }
 	json += keyString + ":";
 	json += "(" + to_string(pageNum) + "," + to_string(slotNum) + ")";
@@ -1417,7 +1416,6 @@ string AuxiloryEntry::toJson() {
         string key;
         VarcharParser* vp = new VarcharParser(this->data);
         vp->unParse(key);
-        key = string(&key.at(0), 1);
         keyString = "\"" + key + "\"";
 	}
 	jsonString = keyString;
