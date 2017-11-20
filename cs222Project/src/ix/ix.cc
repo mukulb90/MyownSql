@@ -717,7 +717,7 @@ RC Node::setFreeSpace(const int &freeSpace) {
 Entry* AuxiloryNode::search(const void * key, Node* &nextNode) {
 	char* cursor = (char*) this->data;
 	cursor += this->getMetaDataSize();
-	void* tempKey = malloc(this->attr.length);
+	void* tempKey = malloc(this->attr.length+sizeof(int));
 	Entry* parentEntry = 0;
 	int numberOfKeys, nextPointer = INVALID_POINTER, leftPointer, rightPointer;
 	this->getNumberOfKeys(numberOfKeys);
@@ -765,7 +765,7 @@ Entry* AuxiloryNode::search(const void * key, Node* &nextNode) {
 }
 
 string AuxiloryNode::toJson() {
-	void* tempdata = malloc(this->attr.length);
+	void* tempdata = malloc(this->attr.length+sizeof(int));
 	int leftPointer, rightPointer;
 	string jsonString = "{";
 	jsonString += "\"keys\":[";
@@ -972,11 +972,11 @@ RC AuxiloryNode::split(Node* secondNode, AuxiloryEntry* &entryToBeInsertedInPare
 				is_first_redistribution = false;
 				secondAuxiloryNode->setLeftPointer(entry->getRightPointer());
 				entryToBeInsertedInParent = AuxiloryEntry::parse(this->attr, entry->data, secondAuxiloryNode->id);
-			} else {
+                this->deleteEntry(entry);
+            } else {
 				secondNode->insertEntry(entry);
 				this->deleteEntry(entry);
 			}
-            entry = (AuxiloryEntry*)entry->getNextEntry();
         }
 	}
 	return 0;
@@ -1088,7 +1088,7 @@ const void* LeafEntry::getKey() {
 }
 
 string LeafEntry::toJson() {
-	void* key = malloc(this->attr.length);
+	void* key = malloc(this->attr.length+sizeof(int));
 	int slotNum, pageNum;
 	string json = "";
 	json += "\"";
@@ -1103,6 +1103,7 @@ string LeafEntry::toJson() {
         string key;
         VarcharParser* vp = new VarcharParser(this->data);
         vp->unParse(keyString);
+        keyString = string(&keyString.at(0), 1);
     }
 	json += keyString + ":";
 	json += "(" + to_string(pageNum) + "," + to_string(slotNum) + ")";
@@ -1416,6 +1417,7 @@ string AuxiloryEntry::toJson() {
         string key;
         VarcharParser* vp = new VarcharParser(this->data);
         vp->unParse(key);
+        key = string(&key.at(0), 1);
         keyString = "\"" + key + "\"";
 	}
 	jsonString = keyString;
