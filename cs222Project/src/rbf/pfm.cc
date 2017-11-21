@@ -1,16 +1,6 @@
 #include "pfm.h"
-#include <string.h>
-#include <stdlib.h>
-#include <cstdio>
-#include <exception>
-#include <fstream>
-#include <stdio.h>
-#include <string.h>
-#include <math.h>
-#include <iostream>
-#include <unordered_map>
 
-#include <vector>
+#include <stdlib.h>
 
 using namespace std;
 
@@ -120,7 +110,21 @@ FileHandle::~FileHandle() {
 }
 
 RC FileHandle::readPage(PageNum pageNum, void *data) {
-	return this->internalReadPage(pageNum, data, true);
+    Page* page = this->file->pagesCache->get(pageNum);
+    if(page == 0 || page->id != pageNum) {
+        int rc = this->internalReadPage(pageNum, data, true);
+        if(rc == 0) {
+            void * copyOfData = malloc(PAGE_SIZE);
+            memcpy(copyOfData, data, PAGE_SIZE);
+            Page* page = new Page(copyOfData, pageNum);
+            this->file->insertPageInCache(page);
+        }
+        return rc;
+
+    } else {
+        memcpy(data, page->data, PAGE_SIZE);
+        return 0;
+    }
 }
 
 RC FileHandle::internalReadPage(PageNum pageNum, void *data, bool shouldAffectCounters) {
@@ -147,28 +151,30 @@ RC FileHandle::writePage(PageNum pageNum, const void *data) {
 	if(pageNum >= this->file->numberOfPages) {
 		return -1;
 	}
-	Page * page = new Page((void*)data);
-	page->serializeToOffset(this->file->name, this->file->getPageStartOffsetByIndex(pageNum), PAGE_SIZE);
-	page->data=0;
-	delete page;
+    void * copyOfData = malloc(PAGE_SIZE);
+    memcpy(copyOfData, data, PAGE_SIZE);
+    Page* page = new Page(copyOfData, pageNum);
+    page->isDirty = true;
+//	page->serializeToOffset(this->file->name, this->file->getPageStartOffsetByIndex(pageNum), PAGE_SIZE);
 	this->writePageCounter++;
 	string path = FILE_HANDLE_SERIALIZATION_LOCATION;
-	this->serialize(path);
+//	this->serialize(path);
+    this->file->insertPageInCache(page);
 	return 0;
 }
 
 
 RC FileHandle::appendPage(const void *data) {
-
-	Page * newPage = new Page((void*)data);
+    void * copyOfData = malloc(PAGE_SIZE);
+    memcpy(copyOfData, data, PAGE_SIZE);
+    Page* newPage = new Page(copyOfData, this->file->numberOfPages);
+    this->file->insertPageInCache(newPage);
 	this->file->numberOfPages++;
 	newPage->serializeToOffset(this->file->name,this->file->getPageStartOffsetByIndex(this->file->numberOfPages-1) , PAGE_SIZE);
 	this->file->serializeToOffset(this->file->name, 0, PAGE_SIZE);
-		newPage->data=0;
-		delete newPage;
 	this->appendPageCounter++;
 	string path = FILE_HANDLE_SERIALIZATION_LOCATION;
-	this->serialize(path);
+//	this->serialize(path);
 	return 0;
 }
 
@@ -225,7 +231,6 @@ int FileHandle::mapToObject(void* data) {
 
 
 Serializable::~Serializable() {
-
 }
 
 int Serializable::deserialize(string fileName) {
@@ -318,10 +323,17 @@ Page::Page() {
 	this->data = (void *) malloc(PAGE_SIZE);
 	this->setFreeSpaceOffset(0);
 	this->setNumberOfSlots(0);
+	isDirty = false;
 }
 
 Page::Page(void * data) {
 	this->data = data;
+	this->isDirty = false;
+}
+
+Page::Page(void* data, int id) {
+    this->data = data;
+    this->id = id;
 }
 
 Page::~Page() {
@@ -526,10 +538,25 @@ PagedFile::PagedFile(string fileName) {
 	this->name = fileName;
 	this->numberOfPages = 0;
 	this->handle = 0;
+    this->pagesCache = new Cache<Page*>(PAGES_CACHE_SIZE);
 }
 
 
 PagedFile::~PagedFile() {
+	for(int i=0; i< PAGES_CACHE_SIZE; i++) {
+		Page* page = this->pagesCache->get(i);
+		if(page != 0 && page->isDirty) {
+			page->serializeToOffset(this->name, this->getPageStartOffsetByIndex(page->id), PAGE_SIZE);
+		}
+	}
+}
+
+RC PagedFile::insertPageInCache(Page* page) {
+	Page* pageAlreadyInCache = this->pagesCache->get(page->id);
+	if(pageAlreadyInCache != 0 && pageAlreadyInCache->id != page->id && pageAlreadyInCache->isDirty) {
+		pageAlreadyInCache->serializeToOffset(this->name, this->getPageStartOffsetByIndex(pageAlreadyInCache->id), PAGE_SIZE);
+	}
+	this->pagesCache->set(page->id, page);
 }
 
 int PagedFile::setFileHandle(FileHandle *fileHandle) {
@@ -960,3 +987,30 @@ RC VarcharParser::unParse(string &str){
 	str = string(cursor, length);
 	return 0;
 };
+
+template<class Value>
+Cache<Value>::Cache(int size) {
+	this->size = size;
+	this->internal_cache = unordered_map<int, Value>();
+}
+
+template<class Value>
+int Cache<Value>::hashCode(int key){
+	return key%(this->size);
+}
+
+template<class Value>
+Value Cache<Value>::get(int k) {
+	int offset = this->hashCode(k);
+	if(this->internal_cache.find(offset) != this->internal_cache.end()) {
+        return this->internal_cache[offset];
+    }
+    return 0;
+}
+
+template<class Value>
+int Cache<Value>::set(int k, Value &v) {
+	int offset = this->hashCode(k);
+	this->internal_cache[offset] = v;
+	return 0;
+}
