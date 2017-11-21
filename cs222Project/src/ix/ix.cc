@@ -1010,8 +1010,7 @@ RC LeafNode::split(Node* secondNode, AuxiloryEntry* &entryToBeInsertedInParent) 
 	Entry* temp;
 	int newNumberOfKeys = 0;
 	for (int i = 0; i<numberOfKeys; ++i) {
-//		##TODO change this to capacity based spliting
-		if(i<numberOfKeys/2) {
+		if(firstNodeCursor < PAGE_SIZE/2) {
 			firstNodeCursor += entry->getEntrySize();
 			newNumberOfKeys++;
 		} else {
@@ -1048,10 +1047,18 @@ RC AuxiloryNode::split(Node* secondNode, AuxiloryEntry* &entryToBeInsertedInPare
 	this->getNumberOfKeys(numberOfKeys);
 	AuxiloryEntry* entry = (AuxiloryEntry*) this->getFirstEntry();
 	AuxiloryNode* secondAuxiloryNode = (AuxiloryNode*)secondNode;
+    int firstNodeSize =  this->getMetaDataSize();
+    int secondNodeSize = this->getMetaDataSize();
+    int firstNodeNumberOfEntriesAfterSplit = 0;
+    int secondNodeNumberOfEntriesAfterSplit = 0;
+    int entrySize;
+    char* secondNodeCursor = (char*) secondNode->data;
 	bool is_first_redistribution = true;
 	for(int i=0; i<numberOfKeys; i++) {
-		if(i<numberOfKeys/2) {
+		if(firstNodeSize < PAGE_SIZE/2) {
+            firstNodeSize += entry->getEntrySize();
 			entry = (AuxiloryEntry*)entry->getNextEntry();
+            firstNodeNumberOfEntriesAfterSplit += 1;
 		} else {
 			if(is_first_redistribution) {
 				is_first_redistribution = false;
@@ -1061,14 +1068,20 @@ RC AuxiloryNode::split(Node* secondNode, AuxiloryEntry* &entryToBeInsertedInPare
 				int rightPointer;
 				entry->unparse(this->attr, key, pageNum, slotNum, rightPointer);
 				entryToBeInsertedInParent = AuxiloryEntry::parse(this->attr, key, pageNum, slotNum, secondAuxiloryNode->id);
-                this->deleteEntry(entry);
                 freeIfNotNull(key);
             } else {
-				secondNode->insertEntry(entry);
-				this->deleteEntry(entry);
+                entrySize = entry->getEntrySize();
+                secondNodeNumberOfEntriesAfterSplit ++;
+                memcpy(secondNodeCursor+secondNodeSize, entry->data, entrySize);
+                secondNodeSize += entrySize;
+				entry = (AuxiloryEntry*)entry->getNextEntry();
 			}
         }
 	}
+    this->setNumberOfKeys(firstNodeNumberOfEntriesAfterSplit);
+    secondNode->setNumberOfKeys(secondNodeNumberOfEntriesAfterSplit);
+    this->setFreeSpace(PAGE_SIZE - firstNodeSize);
+    secondNode->setFreeSpace(PAGE_SIZE - secondNodeSize);
 	return 0;
 }
 
