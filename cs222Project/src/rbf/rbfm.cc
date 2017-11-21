@@ -271,7 +271,9 @@ float compare(const void* to, const void* from, const Attribute &attr, bool isNu
 	if (attr.type == TypeInt) {
 		int fromValue = *((int*) fromCursor);
 		int toValue = *((int*) toCursor);
-		return fromValue - toValue;
+		float floatFromValue = (float)fromValue;
+		float floatToValue = (float) toValue;
+		return floatFromValue - floatToValue;
 	} else if (attr.type == TypeReal) {
 		float fromValue = *((float*) fromCursor);
 		float toValue = *((float*) toCursor);

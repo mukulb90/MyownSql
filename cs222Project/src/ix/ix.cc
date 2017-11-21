@@ -144,13 +144,13 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle, const Attribute &attribute,
 		return rc;
 	}
     if(lowKey == NULL) {
-        ix_ScanIterator.lowKeyEntry = new LeafEntry(graph.getMinKey(), ix_ScanIterator.attribute);
+        ix_ScanIterator.lowKeyEntry = LeafEntry::parse(graph.attr, graph.getMinKey(), 0, 0);
     } else {
         ix_ScanIterator.lowKeyEntry = LeafEntry::parse(graph.attr, lowKey, 0, 0);
     }
 
     if(highKey == NULL) {
-        ix_ScanIterator.highKeyEntry = new LeafEntry(graph.getMaxKey(), ix_ScanIterator.attribute);
+        ix_ScanIterator.highKeyEntry = LeafEntry::parse(graph.attr, graph.getMaxKey(), INT_MAX, INT_MAX);
     } else {
         ix_ScanIterator.highKeyEntry = LeafEntry::parse(graph.attr, highKey, INT_MAX, INT_MAX);
     }
@@ -170,7 +170,6 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle, const Attribute &attribute,
 	ix_ScanIterator.leafNode = leafNode;
 	ix_ScanIterator.numberOfElementsIterated = 0;
 	ix_ScanIterator.currentEntry = leafNode->getFirstEntry();
-
 	return 0;
 }
 
@@ -208,6 +207,7 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key) {
     CompOp operator1 = this->lowOperator;
     CompOp operator2 = this->highOperator;
     start:
+        this->leafNode->getNumberOfKeys(numberOfKeys);
         while(this->numberOfElementsIterated < numberOfKeys) {
             if(*(this->currentEntry) > *highKeyEntry) {
                 goto cleanUp;
@@ -359,7 +359,15 @@ RC Graph::serialize() {
 
 
 void* Graph::getMaxKey() {
+    if(this->attr.type == TypeReal) {
+        float max_float = MAXFLOAT;
+        return &max_float;
+    } else if(this->attr.type == TypeInt) {
+        int max_int = INT_MAX;
+        return &max_int;
+    }
     Node* node = this->getRoot();
+    Node* tempNode;
     NodeType nodeType;
     node->getNodeType(nodeType);
     int numberOfEntries;
@@ -382,6 +390,19 @@ void* Graph::getMaxKey() {
         node->getNodeType(nodeType);
     }
     node->getNumberOfKeys(numberOfEntries);
+    while(numberOfEntries <= 0) {
+        short leftSibling;
+        ((LeafNode*)node)->getLeftSibling(leftSibling);
+        if(leftSibling == INVALID_POINTER) {
+            int min = 0;
+            return &min;
+        }
+        tempNode = node;
+        node = Node::getInstance(leftSibling, node->attr, node->fileHandle);
+        delete tempNode;
+        node->getNumberOfKeys(numberOfEntries);
+    }
+
     Entry* entry = node->getFirstEntry();
     for (int i = 0; i < numberOfEntries-1; ++i) {
         entry = entry->getNextEntry();
@@ -390,22 +411,18 @@ void* Graph::getMaxKey() {
 }
 
 void* Graph::getMinKey() {
-    Node* node = this->getRoot();
-    NodeType nodeType;
-    node->getNodeType(nodeType);
-    int nextNodePointer;
-    while(nodeType != LEAF) {
-        Entry* entry = node->getFirstEntry();
-        nextNodePointer  = ((AuxiloryEntry*)entry)->getLeftPointer();
-        if(nextNodePointer == INVALID_POINTER) {
-            nextNodePointer  = ((AuxiloryEntry*)entry)->getRightPointer();
-        }
-
-        node = Node::getInstance(nextNodePointer, node->attr, node->fileHandle);
-        node->getNodeType(nodeType);
+    if(this->attr.type == TypeInt) {
+        int min_int = INT_MIN;
+        return &min_int;
+    } else if(this->attr.type == TypeReal) {
+        float min_float = INT_MIN;
+        return &min_float;
+    } else {
+        void * minKey = malloc(sizeof(int));
+        int minValue = 0;
+        memcpy(minKey, &minValue, sizeof(int));
+        return minKey;
     }
-    Entry* entry = node->getFirstEntry();
-    return entry->data;
 }
 
 Node* Graph::getRoot() {
@@ -879,6 +896,11 @@ RC Node::getMetaDataSize() {
 }
 
 Entry* Node::getFirstEntry() {
+    int numberOfKeys;
+    this->getNumberOfKeys(numberOfKeys);
+    if(numberOfKeys == 0) {
+        return NULL;
+    }
 	char* cursor = (char*) this->data;
 	cursor += this->getMetaDataSize();
 	NodeType nodeType;
