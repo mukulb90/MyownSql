@@ -33,12 +33,12 @@ RC IndexManager::createFile(const string &fileName) {
 	PagedFileManager * pfm = PagedFileManager::instance();
 	rc = pfm->createFile(fileName);
 	if (rc == 0) {
-		FileHandle fh;
-		pfm->openFile(fileName, fh);
+		FileHandle *fh = new FileHandle();
+		pfm->openFile(fileName, *fh);
 		Graph* graph = Graph::instance(fh);
 		rc = graph->serialize();
 
-		pfm->closeFile(fh);
+		pfm->closeFile(*fh);
 		return rc;
 	}
 	return rc;
@@ -71,8 +71,8 @@ RC IndexManager::closeFile(IXFileHandle &ixfileHandle) {
 RC IndexManager::insertEntry(IXFileHandle &ixfileHandle,
 		const Attribute &attribute, const void *key, const RID &rid) {
 	int rc = 0;
-	FileHandle fileHandle = *(ixfileHandle.fileHandle);
-	if (fileHandle.file == 0) {
+	FileHandle* fileHandle = ixfileHandle.fileHandle;
+	if (fileHandle->file == 0) {
 		return -1;
 	}
 
@@ -95,8 +95,8 @@ RC IndexManager::insertEntry(IXFileHandle &ixfileHandle,
 RC IndexManager::deleteEntry(IXFileHandle &ixfileHandle,
 		const Attribute &attribute, const void *key, const RID &rid) {
 	int rc = 0;
-	FileHandle fileHandle = *(ixfileHandle.fileHandle);
-	if (fileHandle.file == 0) {
+	FileHandle* fileHandle = ixfileHandle.fileHandle;
+	if (fileHandle->file == 0) {
 		return -1;
 	}
 
@@ -138,7 +138,7 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle, const Attribute &attribute,
 	ix_ScanIterator.attribute = attribute;
 	FileHandle* fileHandle = ixfileHandle.fileHandle;
 
-	Graph graph = Graph(*fileHandle, attribute);
+	Graph graph = Graph(fileHandle, attribute);
 	int rc = graph.deserialize();
 	if (rc == -1) {
 
@@ -176,7 +176,7 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle, const Attribute &attribute,
 
 void IndexManager::printBtree(IXFileHandle &ixfileHandle,
 		const Attribute &attribute) const {
-	FileHandle fileHandle = *(ixfileHandle.fileHandle);
+	FileHandle* fileHandle = ixfileHandle.fileHandle;
 	Graph graph = Graph(fileHandle, attribute);
 	int rc = graph.deserialize();
 	Node* node = graph.getRoot();
@@ -308,13 +308,11 @@ IXFileHandle::~IXFileHandle() {
 
 RC IXFileHandle::collectCounterValues(unsigned &readPageCount,
 		unsigned &writePageCount, unsigned &appendPageCount) {
-	readPageCount = this->ixReadPageCounter;
-	writePageCount = this->ixWritePageCounter;
-	appendPageCount = this->ixAppendPageCounter;
+	this->fileHandle->collectCounterValues(readPageCount, writePageCount, appendPageCount);
 	return 0;
 }
 
-Graph* Graph::instance(const FileHandle &fileHandle, const Attribute &attr) {
+Graph* Graph::instance(const FileHandle *fileHandle, const Attribute &attr) {
 	Graph* graph = Graph::instance(fileHandle);
 	if (graph != 0) {
 		graph->attr = attr;
@@ -322,7 +320,7 @@ Graph* Graph::instance(const FileHandle &fileHandle, const Attribute &attr) {
 	return graph;
 }
 
-Graph* Graph::instance(const FileHandle &fileHandle) {
+Graph* Graph::instance(const FileHandle *fileHandle) {
 	Graph* graph = new Graph(fileHandle);
 
 	// initialize a rootNode
@@ -338,16 +336,16 @@ Graph* Graph::instance(const FileHandle &fileHandle) {
 	return graph;
 }
 
-Graph::Graph(const FileHandle &fileHandle) {
+Graph::Graph(const FileHandle *fileHandle) {
 	this->internalRoot = new AuxiloryNode(0, fileHandle);
 	this->internalRoot->setLeftPointer(1);
-	this->fileHandle = fileHandle;
+	this->fileHandle = (FileHandle*)fileHandle;
 }
 
-Graph::Graph(const FileHandle &fileHandle, const Attribute& attr) {
+Graph::Graph(const FileHandle *fileHandle, const Attribute& attr) {
 	this->internalRoot = new AuxiloryNode(0, attr, fileHandle);
 	this->attr = attr;
-	this->fileHandle = fileHandle;
+	this->fileHandle = (FileHandle*)fileHandle;
 }
 
 Graph::~Graph(){
@@ -654,20 +652,20 @@ RC Node::deleteEntry(Entry * deleteEntry) {
 	return rc;
 }
 
-AuxiloryNode::AuxiloryNode(const Attribute &attr, const FileHandle &fileHandle) :
-		Node(fileHandle.file->numberOfPages, attr, fileHandle) {
+AuxiloryNode::AuxiloryNode(const Attribute &attr, const FileHandle *fileHandle) :
+		Node(fileHandle->file->numberOfPages, attr, fileHandle) {
 	this->setNodeType(AUXILORY);
 	this->setLeftPointer(INVALID_POINTER);
 }
 
 AuxiloryNode::AuxiloryNode(const int &id, const Attribute &attr,
-		const FileHandle &fileHandle) :
+		const FileHandle *fileHandle) :
 		Node(id, attr, fileHandle) {
 	this->setNodeType(AUXILORY);
 	this->setLeftPointer(INVALID_POINTER);
 }
 
-AuxiloryNode::AuxiloryNode(const int &id, const FileHandle & fileHandle) :
+AuxiloryNode::AuxiloryNode(const int &id, const FileHandle *fileHandle) :
 		Node(id, fileHandle) {
 	this->setNodeType(AUXILORY);
 	this->setLeftPointer(INVALID_POINTER);
@@ -692,18 +690,18 @@ int AuxiloryNode::setLeftPointer(const int &leftPointer) {
 	return 0;
 }
 
-Node::Node(const int &id, const Attribute &attr, const FileHandle &fileHandle) {
+Node::Node(const int &id, const Attribute &attr, const FileHandle *fileHandle) {
 	this->attr = attr;
 	this->id = id;
-	this->fileHandle = fileHandle;
+	this->fileHandle = (FileHandle*)fileHandle;
 	this->data = malloc(PAGE_SIZE);
 	memset(this->data, 0, PAGE_SIZE);
 	this->setFreeSpace(PAGE_SIZE - this->getMetaDataSize());
 }
 
-Node::Node(const int &id, const FileHandle &fileHandle) {
+Node::Node(const int &id, const FileHandle *fileHandle) {
 	this->id = id;
-	this->fileHandle = fileHandle;
+	this->fileHandle = (FileHandle*)fileHandle;
 	this->data = malloc(PAGE_SIZE);
 	memset(this->data, 0, PAGE_SIZE);
 	this->setFreeSpace(PAGE_SIZE - this->getMetaDataSize());
@@ -713,7 +711,7 @@ Node::~Node() {
 	freeIfNotNull(this->data);
 }
 
-Node* Node::getInstance(const int &id, const Attribute &attr, const FileHandle &fileHandle) {
+Node* Node::getInstance(const int &id, const Attribute &attr, const FileHandle *fileHandle) {
     Node* node = new Node(id, attr, fileHandle);
     node->deserialize();
     NodeType nodeType;
@@ -726,14 +724,14 @@ Node* Node::getInstance(const int &id, const Attribute &attr, const FileHandle &
 }
 
 RC Node::deserialize() {
-	return this->fileHandle.readPage(this->id, this->data);
+	return this->fileHandle->readPage(this->id, this->data);
 }
 
 RC Node::serialize() {
-	if (this->id == this->fileHandle.getNumberOfPages()) {
-		return this->fileHandle.appendPage(this->data);
+	if (this->id == this->fileHandle->getNumberOfPages()) {
+		return this->fileHandle->appendPage(this->data);
 	}
-	return this->fileHandle.writePage(this->id, this->data);
+	return this->fileHandle->writePage(this->id, this->data);
 }
 
 RC Node::getNumberOfKeys(int& numberOfKeys) {
@@ -967,22 +965,22 @@ RC Node::insertEntry(Entry* entry) {
 	return 0;
 }
 
-LeafNode::LeafNode(int id, FileHandle const& fileHandle) :
+LeafNode::LeafNode(int id, FileHandle const* fileHandle) :
         Node(id, fileHandle) {
     this->setNodeType(LEAF);
     this->setRightSibling(-1);
     this->setLeftSibling(-1);
 }
 
-LeafNode::LeafNode(Attribute const &attr, FileHandle const& fileHandle) :
-		Node(fileHandle.file->numberOfPages, attr, fileHandle) {
+LeafNode::LeafNode(Attribute const &attr, FileHandle const* fileHandle) :
+		Node(fileHandle->file->numberOfPages, attr, fileHandle) {
 	this->setNodeType(LEAF);
 	this->setRightSibling(-1);
 	this->setLeftSibling(-1);
 }
 
 LeafNode::LeafNode(const int &id, Attribute const &attr,
-		FileHandle const& fileHandle) :
+		FileHandle const* fileHandle) :
 		Node(id, attr, fileHandle) {
 	this->setNodeType(LEAF);
 	this->setLeftSibling(-1);

@@ -180,21 +180,21 @@ class Node {
 
 protected:
 	//	This constructor is used to create a node if nodeId is known
-	Node(const int &id, const Attribute &attr, const FileHandle &fileHandle);
-	Node(const int &id, const FileHandle &fileHandle);
+	Node(const int &id, const Attribute &attr, const FileHandle *fileHandle);
+	Node(const int &id, const FileHandle *fileHandle);
 public:
 
 	int id;
 	void* data;
 	Attribute attr;
-	FileHandle fileHandle;
+	FileHandle* fileHandle;
 
 //	This constructor is used to create a new Node
-	Node(const Attribute &attr, const FileHandle &fileHandle);
+	Node(const Attribute &attr, const FileHandle *fileHandle);
 
 	~Node();
 
-	static Node* getInstance(const int &id, const Attribute &attr, const FileHandle &fileHandle);
+	static Node* getInstance(const int &id, const Attribute &attr, const FileHandle *fileHandle);
 
 	RC insertEntry(Entry* entry);
 	RC internalInsert(void* cursor, Entry* entry);
@@ -224,9 +224,9 @@ public:
 class LeafNode: public Node {
 
 public:
-	LeafNode(int id, const FileHandle &fileHandle);
-	LeafNode(const Attribute &attr, const FileHandle &fileHandle);
-	LeafNode(const int &id, const Attribute &attr, const FileHandle &fileHandle);
+	LeafNode(int id, const FileHandle *fileHandle);
+	LeafNode(const Attribute &attr, const FileHandle *fileHandle);
+	LeafNode(const int &id, const Attribute &attr, const FileHandle *fileHandle);
 	~LeafNode();
 
 	//	This method splits the Node into two splits and equally distributes the entries between both nodes
@@ -248,11 +248,11 @@ class AuxiloryNode: public Node {
 
 public:
 	AuxiloryNode(const Attribute &attr,
-				const FileHandle &fileHandle);
+				const FileHandle *fileHandle);
 
 	AuxiloryNode(const int &id, const Attribute &attr,
-			const FileHandle &fileHandle);
-	AuxiloryNode(const int &id, const FileHandle &fileHandle);
+			const FileHandle *fileHandle);
+	AuxiloryNode(const int &id, const FileHandle *fileHandle);
 
 	~AuxiloryNode();
 
@@ -270,14 +270,14 @@ public:
     AuxiloryNode* internalRoot;
 //    AuxiloryNode* root;
 	Attribute attr;
-	FileHandle fileHandle;
+	FileHandle* fileHandle;
 
-	Graph(const FileHandle &fileHandle);
-	Graph(const FileHandle &fileHandle, const Attribute& attr);
+	Graph(const FileHandle *fileHandle);
+	Graph(const FileHandle *fileHandle, const Attribute& attr);
 	~Graph();
 
-	static Graph* instance(const FileHandle &fileHandle);
-	static Graph* instance(const FileHandle &fileHandle, const Attribute &attr);
+	static Graph* instance(const FileHandle *fileHandle);
+	static Graph* instance(const FileHandle *fileHandle, const Attribute &attr);
 
     Node* getRoot();
     void setRoot(AuxiloryNode* root);
