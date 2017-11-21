@@ -162,6 +162,7 @@ RC IndexManager::scan(IXFileHandle &ixfileHandle, const Attribute &attribute,
 	while (nodeType != LEAF) {
 		AuxiloryNode* auxNode = (AuxiloryNode*) node;
 		auxNode->search(ix_ScanIterator.lowKeyEntry, node);
+        delete auxNode;
 		node->getNodeType(nodeType);
 	}
     nextNode = node;
@@ -186,7 +187,7 @@ void IndexManager::printBtree(IXFileHandle &ixfileHandle,
     } else {
         cout << ((AuxiloryNode*) node)->toJson() << endl;
     }
-
+    delete node;
 }
 
 IX_ScanIterator::IX_ScanIterator() {
@@ -197,6 +198,7 @@ IX_ScanIterator::~IX_ScanIterator() {
 
 RC IX_ScanIterator::getNextEntry(RID &rid, void *key) {
     int pageNum, slotNum;
+    int rc = -1;
     Entry* lowKeyEntry = this->lowKeyEntry;
     Entry* highKeyEntry = this->highKeyEntry;
     int numberOfKeys;
@@ -208,7 +210,7 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key) {
     start:
         while(this->numberOfElementsIterated < numberOfKeys) {
             if(*(this->currentEntry) > *highKeyEntry) {
-                return -1;
+                goto cleanUp;
             }
             if(operator1 == GT_OP) {
                 if(operator2 == LT_OP) {
@@ -233,7 +235,7 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key) {
                         temp = this->currentEntry;
 						this->currentEntry = this->currentEntry->getNextEntry();
                         delete (LeafEntry*)temp;
-						return 0;
+                        return 0;
                     }
                 }
             } else if(operator1 == GE_OP) {
@@ -271,14 +273,17 @@ RC IX_ScanIterator::getNextEntry(RID &rid, void *key) {
         short rightSibling;
         this->leafNode->getRightSibling(rightSibling);
         if(rightSibling == INVALID_POINTER) {
-            return -1;
+            rc = -1;
+            goto cleanUp;
         }
         this->leafNode = (LeafNode*)Node::getInstance(rightSibling, this->attribute, this->leafNode->fileHandle);
         this->currentEntry = this->leafNode->getFirstEntry();
         this->numberOfElementsIterated = 0;
         goto start;
     }
-	return -1;
+    cleanUp:
+        delete this->leafNode;
+	return rc;
 }
 
 RC IX_ScanIterator::close() {
@@ -547,9 +552,10 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 	while(!visitedNodes.empty()){
 		Node* top = visitedNodes.top();
 		visitedNodes.pop();
+        freeIfNotNull(top->data);
 		delete top;
 	}
-    freeIfNotNull(entry);
+    freeIfNotNull(entry->data);
     // for now , keep inserting in same node
 	return -1;
 
@@ -558,6 +564,7 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 			Node* top = visitedNodes.top();
 			visitedNodes.pop();
 			delete top;
+            freeIfNotNull(top->data);
 		}
 		while(!visitedEntries.empty()) {
             Entry *top = visitedEntries.top();
@@ -566,7 +573,7 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
                 delete top;
             }
         }
-        freeIfNotNull(entry);
+        freeIfNotNull(entry->data);
 		return 0;
 }
 
@@ -651,7 +658,7 @@ AuxiloryNode::AuxiloryNode(const int &id, const FileHandle & fileHandle) :
 }
 
 AuxiloryNode::~AuxiloryNode() {
-
+    freeIfNotNull(this->data);
 }
 
 int AuxiloryNode::getLeftPointer() {
@@ -962,7 +969,7 @@ LeafNode::LeafNode(const int &id, Attribute const &attr,
 }
 
 LeafNode::~LeafNode() {
-
+    freeIfNotNull(this->data);
 }
 
 RC LeafNode::setLeftSibling(const short &pageNum) {
@@ -1288,8 +1295,7 @@ LeafEntry* LeafEntry::parse(Attribute &attr, const void* key,
 		string keyString;
 		varchar->unParse(keyString);
 		memcpy(cursor, varchar->data, sizeof(int) + keyString.size());
-        varchar->data = 0;
-        delete varchar;
+
 		cursor += sizeof(int) + keyString.size();
 
 		memcpy(cursor, &pageNum, sizeof(int));

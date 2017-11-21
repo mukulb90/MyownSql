@@ -154,7 +154,7 @@ RC RecordBasedFileManager::printRecord(const vector<Attribute> &recordDescriptor
 		int k = int(i/8);
 		*(nullarr+i) = nullstream[k] & (1<<(7 - i%8));
 	}
-	freeIfNotNull(nullstream);
+	freeIfNotNull((void*&)nullstream);
 
 	cursor += nullBytes;
 	cout << "Record:-";

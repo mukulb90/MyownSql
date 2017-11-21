@@ -18,6 +18,7 @@ void printNode(Node *node) {
 	NodeType nodeType;
 	node->getNodeType(nodeType);
 	Entry *entry;
+	Entry* temp;
 	int leftPointer = NULL, rightPointer = NULL;
 	int tempKey;
 	//cout << node->toJson() << endl;
@@ -31,7 +32,9 @@ void printNode(Node *node) {
 			((AuxiloryEntry*) entry)->unparse(node->attr, key,
 					rightPointer);
 
+			temp = entry;
 			entry = entry->getNextEntry();
+			delete temp;
 
 			if (rightPointer != NULL) {
 				Node *nextNode = new LeafNode(rightPointer, node->attr,

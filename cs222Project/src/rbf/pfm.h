@@ -257,6 +257,6 @@ public:
 	RC unParse(string &str);
 };
 
-void freeIfNotNull(void * data);
+void freeIfNotNull(void * &data);
 float compare(const void* to, const void* from, const Attribute &attr, bool isNullBitsInTo, bool isNullBitsInFrom);
 #endif

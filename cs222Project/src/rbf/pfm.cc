@@ -4,7 +4,7 @@
 
 using namespace std;
 
-void freeIfNotNull(void * data){
+void freeIfNotNull(void * &data){
 	if(data!=0){
 		free(data);
 		data = 0 ;
@@ -685,7 +685,7 @@ int InternalRecord::getInternalRecordBytes(const vector<Attribute> &recordDescri
 			}
 
 	}
-	freeIfNotNull(nullBits);
+	freeIfNotNull((void*&)nullBits);
 	return size;
 }
 
@@ -737,7 +737,7 @@ InternalRecord* InternalRecord::parse(const vector<Attribute> &recordDescriptor,
 	memcpy(internalCursor + numberOfAttributes*sizeof(unsigned short), &insertionOffset, sizeof(unsigned short));
 
 	record->data = internalData;
-	freeIfNotNull(nullBits);
+	freeIfNotNull((void*&)nullBits);
 	return record;
 }
 
@@ -786,7 +786,7 @@ RC InternalRecord::unParse(const vector<Attribute> &recordDescriptor, void* data
 		cursor += length;
 		}
 	}
-	freeIfNotNull (nullBits);
+	freeIfNotNull ((void*&)nullBits);
 	return 0;
 }
 
@@ -810,7 +810,7 @@ RC InternalRecord::getAttributeByIndex(const int &index, const vector<Attribute>
 	}
 	memcpy(attributeCursor, startCursor + offsetFromStart, numberOfBytes);
 	isNull = *(nullBits+index);
-	freeIfNotNull(nullBits);
+	freeIfNotNull((void*&)nullBits);
 	return 0;
 }
 
