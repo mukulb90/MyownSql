@@ -11,7 +11,7 @@
 #include <unordered_map>
 
 #define FILE_HANDLE_SERIALIZATION_LOCATION  "access_stats.data"
-#define PAGES_CACHE_SIZE 10
+#define PAGES_CACHE_SIZE 100
 
 using namespace std;
 
