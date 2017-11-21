@@ -29,6 +29,7 @@ private:
 
 public:
 	Cache(int size);
+	~Cache();
 	Value get(int k);
 	int set(int k, Value &v);
 

@@ -197,6 +197,7 @@ public:
 	static Node* getInstance(const int &id, const Attribute &attr, const FileHandle &fileHandle);
 
 	RC insertEntry(Entry* entry);
+	RC internalInsert(void* cursor, Entry* entry);
 
 // 	save the node on file system
 	RC serialize();

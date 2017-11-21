@@ -139,7 +139,7 @@ RC FileHandle::internalReadPage(PageNum pageNum, void *data, bool shouldAffectCo
 	if(shouldAffectCounters) {
 		this->readPageCounter++;
 		string path = FILE_HANDLE_SERIALIZATION_LOCATION;
-		this->serialize(path);
+//		this->serialize(path);
 	}
 	page->data=0;
 	delete page;
@@ -171,7 +171,6 @@ RC FileHandle::appendPage(const void *data) {
     this->file->insertPageInCache(newPage);
 	this->file->numberOfPages++;
 	newPage->serializeToOffset(this->file->name,this->file->getPageStartOffsetByIndex(this->file->numberOfPages-1) , PAGE_SIZE);
-	this->file->serializeToOffset(this->file->name, 0, PAGE_SIZE);
 	this->appendPageCounter++;
 	string path = FILE_HANDLE_SERIALIZATION_LOCATION;
 //	this->serialize(path);
@@ -308,15 +307,7 @@ bool fileExists(string fileName) {
 }
 
 unsigned long fsize(char * fileName) {
-	if(!fileExists(fileName)) {
-		return 0;
-	}
-    string mode = "rb+";
-	FILE* f = getFileHandle(fileName, mode);
-	fseek(f, 0, SEEK_END);
-	unsigned long len = (unsigned long) ftell(f);
-//	fclose(f);
-	return len;
+	return PAGE_SIZE;
 }
 
 Page::Page() {
@@ -338,7 +329,6 @@ Page::Page(void* data, int id) {
 
 Page::~Page() {
 	freeIfNotNull(this->data);
-
 }
 
 int Page::getBytes() {
@@ -543,18 +533,25 @@ PagedFile::PagedFile(string fileName) {
 
 
 PagedFile::~PagedFile() {
+	this->serializeToOffset(this->name, 0, PAGE_SIZE);
 	for(int i=0; i< PAGES_CACHE_SIZE; i++) {
 		Page* page = this->pagesCache->get(i);
-		if(page != 0 && page->isDirty) {
-			page->serializeToOffset(this->name, this->getPageStartOffsetByIndex(page->id), PAGE_SIZE);
+		if(page != 0) {
+			if(page->isDirty)
+				page->serializeToOffset(this->name, this->getPageStartOffsetByIndex(page->id), PAGE_SIZE);
+			delete page;
 		}
 	}
+	delete this->pagesCache;
 }
 
 RC PagedFile::insertPageInCache(Page* page) {
 	Page* pageAlreadyInCache = this->pagesCache->get(page->id);
-	if(pageAlreadyInCache != 0 && pageAlreadyInCache->id != page->id && pageAlreadyInCache->isDirty) {
-		pageAlreadyInCache->serializeToOffset(this->name, this->getPageStartOffsetByIndex(pageAlreadyInCache->id), PAGE_SIZE);
+	if(pageAlreadyInCache != 0) {
+		if(pageAlreadyInCache->id != page->id && pageAlreadyInCache->isDirty) {
+			pageAlreadyInCache->serializeToOffset(this->name, this->getPageStartOffsetByIndex(pageAlreadyInCache->id), PAGE_SIZE);
+		}
+		delete pageAlreadyInCache;
 	}
 	this->pagesCache->set(page->id, page);
 }
@@ -992,6 +989,10 @@ template<class Value>
 Cache<Value>::Cache(int size) {
 	this->size = size;
 	this->internal_cache = unordered_map<int, Value>();
+}
+
+template<class Value>
+Cache<Value>::~Cache() {
 }
 
 template<class Value>
