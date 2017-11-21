@@ -7,7 +7,7 @@
 #include <stack>
 #include <utility>
 #include <unordered_set>
-#include <limits.h>
+#include <limits>
 
 #include "../rbf/pfm.h"
 
