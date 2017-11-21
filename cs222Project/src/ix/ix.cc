@@ -549,7 +549,7 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
 		visitedNodes.pop();
 		delete top;
 	}
-
+    freeIfNotNull(entry);
     // for now , keep inserting in same node
 	return -1;
 
@@ -566,6 +566,7 @@ RC Graph::insertEntry(const void * key, RID const& rid) {
                 delete top;
             }
         }
+        freeIfNotNull(entry);
 		return 0;
 }
 
@@ -585,11 +586,13 @@ RC Graph::deleteKey(const void * key, const RID &rid) {
 
     if (node == NULL) {
         cout << "Entry could not be found" << endl;
+        freeIfNotNull(deleteEntry->data);
         rc = -1;
     }
 		node->getNodeType(nodeType);
 		rc = ((LeafNode*) node)->deleteEntry(deleteEntry);
         node->serialize();
+        freeIfNotNull(deleteEntry->data);
 		return rc;
 }
 
@@ -652,11 +655,11 @@ AuxiloryNode::~AuxiloryNode() {
 }
 
 int AuxiloryNode::getLeftPointer() {
-	int* leftPointer = (int*)malloc(sizeof(int));
+	int leftPointer;
 	char * cursor = (char*) this->data;
 	cursor += 3*sizeof(int);
-	memcpy(leftPointer, cursor, sizeof(int));
-	return *leftPointer;
+	memcpy(&leftPointer, cursor, sizeof(int));
+	return leftPointer;
 }
 
 int AuxiloryNode::setLeftPointer(const int &leftPointer) {
@@ -759,6 +762,7 @@ Entry* AuxiloryNode::search(Entry* entry, Node* &nextNode) {
 	this->getNumberOfKeys(numberOfKeys);
 	if (numberOfKeys == 0) {
 		nextNode = NULL;
+        freeIfNotNull(tempKey);
 		return parentEntry;
 	}
 	Entry* searchEntry = entry;
@@ -858,7 +862,7 @@ string AuxiloryNode::toJson() {
 
 	}
 	jsonString += "]}";
-	free(tempdata);
+	freeIfNotNull(tempdata);
 	return jsonString;
 
 }
@@ -920,7 +924,7 @@ RC Node::insertEntry(Entry* entry) {
 			memcpy(cursor, buffer, shiftSize);
 			this->setNumberOfKeys(numberOfKeys + 1);
 			this->setFreeSpace(freeSpace - spaceRequiredByEntry);
-			free(buffer);
+			freeIfNotNull(buffer);
 			delete nodeEntry;
 			return 0;
 		} else {
@@ -1028,6 +1032,7 @@ RC LeafNode::split(Node* secondNode, AuxiloryEntry* &entryToBeInsertedInParent) 
 	AuxiloryEntry* parentEntry = AuxiloryEntry::parse(this->attr, key, pageNum, slotNum, secondNode->id);
 	entryToBeInsertedInParent = parentEntry;
     this->addAfter((LeafNode*)secondNode);
+    freeIfNotNull(key);
 	return 0;
 }
 
@@ -1050,6 +1055,7 @@ RC AuxiloryNode::split(Node* secondNode, AuxiloryEntry* &entryToBeInsertedInPare
 				entry->unparse(this->attr, key, pageNum, slotNum, rightPointer);
 				entryToBeInsertedInParent = AuxiloryEntry::parse(this->attr, key, pageNum, slotNum, secondAuxiloryNode->id);
                 this->deleteEntry(entry);
+                freeIfNotNull(key);
             } else {
 				secondNode->insertEntry(entry);
 				this->deleteEntry(entry);
@@ -1189,6 +1195,8 @@ const void* LeafEntry::getKey() {
         string key;
         VarcharParser* varcharParser = new VarcharParser(this->data);
         varcharParser->unParse(key);
+        varcharParser->data = 0;
+        delete varcharParser;
         return (const void *)key.c_str();
     }
 	return this->data;
@@ -1210,7 +1218,10 @@ string LeafEntry::toJson() {
         string key;
         VarcharParser* vp = new VarcharParser(this->data);
         vp->unParse(keyString);
+        vp->data = 0;
+        delete vp;
     }
+    freeIfNotNull(key);
 	json += keyString + ":";
 	json += "(" + to_string(pageNum) + "," + to_string(slotNum) + ")";
 	json += "\"";
@@ -1276,8 +1287,9 @@ LeafEntry* LeafEntry::parse(Attribute &attr, const void* key,
 		VarcharParser* varchar = new VarcharParser((void*) key);
 		string keyString;
 		varchar->unParse(keyString);
-
 		memcpy(cursor, varchar->data, sizeof(int) + keyString.size());
+        varchar->data = 0;
+        delete varchar;
 		cursor += sizeof(int) + keyString.size();
 
 		memcpy(cursor, &pageNum, sizeof(int));
@@ -1399,6 +1411,8 @@ const void* AuxiloryEntry::getKey() {
         string key;
         VarcharParser* varcharParser = new VarcharParser(this->data);
         varcharParser->unParse(key);
+        varcharParser->data = 0;
+        delete varcharParser;
         return (void*)key.c_str();
     }
 	return  cursor;
@@ -1422,6 +1436,8 @@ AuxiloryEntry* AuxiloryEntry::parse(Attribute &attr, const void* key, const int 
 		VarcharParser* varchar = new VarcharParser((void*)key);
 		string stringKey;
 		varchar->unParse(stringKey);
+        varchar->data = 0;
+        delete varchar;
 		memcpy(cursor, key, sizeof(int) + stringKey.size());
 		cursor += sizeof(int) + stringKey.size();
 	}
@@ -1450,6 +1466,8 @@ RC AuxiloryEntry::unparse(Attribute &attr, void* key, int &pageNum, int &slotNum
 		VarcharParser* varcharParser = new VarcharParser(cursor);
 		string keyString;
 		varcharParser->unParse(keyString);
+        varcharParser->data = 0;
+        delete varcharParser;
 		memcpy(key, cursor, sizeof(int) + keyString.size());
 		cursor += sizeof(int) + keyString.size();
 	}
@@ -1524,6 +1542,8 @@ string AuxiloryEntry::toJson() {
         string key;
         VarcharParser* vp = new VarcharParser(this->data);
         vp->unParse(key);
+        vp->data = 0;
+        delete vp;
         cursor += sizeof(int) + key.size();
         keyString = key;
 	}
