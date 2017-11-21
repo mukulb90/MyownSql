@@ -1033,8 +1033,7 @@ RC LeafNode::split(Node* secondNode, AuxiloryEntry* &entryToBeInsertedInParent) 
 	Entry* temp;
 	int newNumberOfKeys = 0;
 	for (int i = 0; i<numberOfKeys; ++i) {
-//		##TODO change this to capacity based spliting
-		if(i<numberOfKeys/2) {
+		if(firstNodeCursor < PAGE_SIZE/2) {
 			firstNodeCursor += entry->getEntrySize();
 			newNumberOfKeys++;
 		} else {
@@ -1071,9 +1070,11 @@ RC AuxiloryNode::split(Node* secondNode, AuxiloryEntry* &entryToBeInsertedInPare
 	this->getNumberOfKeys(numberOfKeys);
 	AuxiloryEntry* entry = (AuxiloryEntry*) this->getFirstEntry();
 	AuxiloryNode* secondAuxiloryNode = (AuxiloryNode*)secondNode;
+    int firstNodeSize = this->getMetaDataSize();
 	bool is_first_redistribution = true;
 	for(int i=0; i<numberOfKeys; i++) {
-		if(i<numberOfKeys/2) {
+		if(firstNodeSize < PAGE_SIZE/2) {
+            firstNodeSize += entry->getEntrySize();
 			entry = (AuxiloryEntry*)entry->getNextEntry();
 		} else {
 			if(is_first_redistribution) {
