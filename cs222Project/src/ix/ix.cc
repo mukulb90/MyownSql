@@ -7,6 +7,7 @@
 #include <stack>
 #include <utility>
 #include <unordered_set>
+#include <limits.h>
 
 #include "../rbf/pfm.h"
 
@@ -360,7 +361,7 @@ RC Graph::serialize() {
 
 void* Graph::getMaxKey() {
     if(this->attr.type == TypeReal) {
-        float max_float = MAXFLOAT;
+        float max_float = numeric_limits<float>::max();
         return &max_float;
     } else if(this->attr.type == TypeInt) {
         int max_int = INT_MAX;
@@ -415,7 +416,7 @@ void* Graph::getMinKey() {
         int min_int = INT_MIN;
         return &min_int;
     } else if(this->attr.type == TypeReal) {
-        float min_float = INT_MIN;
+        float min_float = numeric_limits<float>::min();
         return &min_float;
     } else {
         void * minKey = malloc(sizeof(int));
