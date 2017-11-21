@@ -360,13 +360,13 @@ RC Graph::serialize() {
 
 
 void* Graph::getMaxKey() {
-    if(this->attr.type == TypeReal) {
-        float max_float = numeric_limits<float>::max();
-        return &max_float;
-    } else if(this->attr.type == TypeInt) {
-        int max_int = INT_MAX;
-        return &max_int;
-    }
+//    if(this->attr.type == TypeReal) {
+//        float max_float = numeric_limits<float>::max();
+//        return &max_float;
+//    } else if(this->attr.type == TypeInt) {
+//        int max_int = INT_MAX;
+//        return &max_int;
+//    }
     Node* node = this->getRoot();
     Node* tempNode;
     NodeType nodeType;
