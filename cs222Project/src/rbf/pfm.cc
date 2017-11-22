@@ -1,23 +1,31 @@
 #include "pfm.h"
-#include <string.h>
-#include <stdlib.h>
-#include <cstdio>
-#include <exception>
-#include <fstream>
-#include <stdio.h>
-#include <string.h>
-#include <math.h>
-#include <iostream>
 
-#include <vector>
+#include <stdlib.h>
 
 using namespace std;
 
-void freeIfNotNull(void * data){
+void freeIfNotNull(void * &data){
 	if(data!=0){
 		free(data);
 		data = 0 ;
 	}
+}
+
+unordered_map<string, FILE*> map;
+
+FILE* getFileHandle(const string &fileName,string mode){
+    string key = fileName + "-" + mode;
+    if(map.find(key) != map.end()) {
+//        cout << "Cache Hit" << endl;
+        return map[key];
+    } else {
+//        cout << "Cache MISS" << endl;
+        FILE* file = fopen(fileName.c_str(), mode.c_str());
+        if(file != NULL) {
+            map[key] = file;
+        }
+        return file;
+    }
 }
 
 bool operator==(const RID& rid1, const RID& rid2){
@@ -64,11 +72,12 @@ RC PagedFileManager::openFile(const string &fileName, FileHandle &fileHandle) {
 	if (!fileExists(fileName)) {
 		return -1;
 	}
-	FILE * handle = fopen(fileName.c_str(), "rb");
+    string mode = "rb+";
+	FILE * handle = getFileHandle(fileName, mode);
 	if (!handle) {
 		return -1;
 	}
-	fclose(handle);
+//	fclose(handle);
 	PagedFile* file = new PagedFile(fileName);
 	file->deserialize(fileName);
 	if(strcmp(file->name.c_str(), fileName.c_str()) != 0) {
@@ -101,11 +110,25 @@ FileHandle::~FileHandle() {
 }
 
 RC FileHandle::readPage(PageNum pageNum, void *data) {
-	return this->internalReadPage(pageNum, data, true);
+    Page* page = this->file->pagesCache->get(pageNum);
+    if(page == 0 || page->id != pageNum) {
+        int rc = this->internalReadPage(pageNum, data, true);
+        if(rc == 0) {
+            void * copyOfData = malloc(PAGE_SIZE);
+            memcpy(copyOfData, data, PAGE_SIZE);
+            Page* page = new Page(copyOfData, pageNum);
+            this->file->insertPageInCache(page);
+        }
+        return rc;
+
+    } else {
+        memcpy(data, page->data, PAGE_SIZE);
+        return 0;
+    }
 }
 
 RC FileHandle::internalReadPage(PageNum pageNum, void *data, bool shouldAffectCounters) {
-	if(pageNum >= this->file->numberOfPages) {
+	if(this->file == 0 || pageNum >= this->file->numberOfPages) {
 		return -1;
 	}
 
@@ -116,7 +139,7 @@ RC FileHandle::internalReadPage(PageNum pageNum, void *data, bool shouldAffectCo
 	if(shouldAffectCounters) {
 		this->readPageCounter++;
 		string path = FILE_HANDLE_SERIALIZATION_LOCATION;
-		this->serialize(path);
+//		this->serialize(path);
 	}
 	page->data=0;
 	delete page;
@@ -128,28 +151,29 @@ RC FileHandle::writePage(PageNum pageNum, const void *data) {
 	if(pageNum >= this->file->numberOfPages) {
 		return -1;
 	}
-	Page * page = new Page((void*)data);
-	page->serializeToOffset(this->file->name, this->file->getPageStartOffsetByIndex(pageNum), PAGE_SIZE);
-	page->data=0;
-	delete page;
+    void * copyOfData = malloc(PAGE_SIZE);
+    memcpy(copyOfData, data, PAGE_SIZE);
+    Page* page = new Page(copyOfData, pageNum);
+    page->isDirty = true;
+//	page->serializeToOffset(this->file->name, this->file->getPageStartOffsetByIndex(pageNum), PAGE_SIZE);
 	this->writePageCounter++;
 	string path = FILE_HANDLE_SERIALIZATION_LOCATION;
-	this->serialize(path);
+//	this->serialize(path);
+    this->file->insertPageInCache(page);
 	return 0;
 }
 
 
 RC FileHandle::appendPage(const void *data) {
-
-	Page * newPage = new Page((void*)data);
+    void * copyOfData = malloc(PAGE_SIZE);
+    memcpy(copyOfData, data, PAGE_SIZE);
+    Page* newPage = new Page(copyOfData, this->file->numberOfPages);
+    this->file->insertPageInCache(newPage);
 	this->file->numberOfPages++;
 	newPage->serializeToOffset(this->file->name,this->file->getPageStartOffsetByIndex(this->file->numberOfPages-1) , PAGE_SIZE);
-	this->file->serializeToOffset(this->file->name, 0, PAGE_SIZE);
-		newPage->data=0;
-		delete newPage;
 	this->appendPageCounter++;
 	string path = FILE_HANDLE_SERIALIZATION_LOCATION;
-	this->serialize(path);
+//	this->serialize(path);
 	return 0;
 }
 
@@ -206,7 +230,6 @@ int FileHandle::mapToObject(void* data) {
 
 
 Serializable::~Serializable() {
-
 }
 
 int Serializable::deserialize(string fileName) {
@@ -227,17 +250,21 @@ int Serializable::deserializeToOffset(string fileName, int startOffset, int bloc
 	}
 	void* buffer = malloc(size);
 	FILE* handle;
+    string mode;
 	if(startOffset != -1) {
-		handle=fopen(fileName.c_str(), "rb+");
+        mode = "rb+";
+		handle=getFileHandle(fileName, mode);
 		fseek(handle, startOffset, SEEK_SET);
 	}
 	else {
-		handle=fopen(fileName.c_str(), "rb");
-	}
+        mode = "rb+";
+		handle=getFileHandle(fileName, mode);
+        fseek(handle, 0, SEEK_SET);
+    }
 	fread(buffer, size, 1, handle);
 	this->mapToObject(buffer);
 	free(buffer);
-	fclose(handle);
+//	fclose(handle);
 	return 0;
 }
 
@@ -251,21 +278,27 @@ int Serializable::serializeToOffset(string fileName,  int startOffset=-1, int bl
 	void* buffer = malloc(memory);
 	this->mapFromObject(buffer);
 	FILE* handle;
+    string mode;
 	if(startOffset != -1) {
-		handle=fopen(fileName.c_str(), "rb+");
+        mode = "rb+";
+		handle=getFileHandle(fileName, mode);
 		fseek(handle, startOffset, SEEK_SET);
 	}
 	else {
-		handle=fopen(fileName.c_str(), "wb");
-	}
+        mode  = "wb";
+		handle=getFileHandle(fileName, mode);
+        fseek(handle, 0, SEEK_SET);
+    }
 	fwrite(buffer, memory, 1, handle);
 	free(buffer);
-	fclose(handle);
+    fflush(handle);
+//	fclose(handle);
 	return 0;
 }
 
 bool fileExists(string fileName) {
-	FILE* handle = fopen(fileName.c_str(), "rb");
+    string mode = "rb+";
+	FILE* handle = fopen(fileName.c_str(), mode.c_str());
 	bool exists = handle != 0;
 	if(exists) {
 		fclose(handle);
@@ -274,29 +307,28 @@ bool fileExists(string fileName) {
 }
 
 unsigned long fsize(char * fileName) {
-	if(!fileExists(fileName)) {
-		return 0;
-	}
-	FILE* f = fopen(fileName, "rb");
-	fseek(f, 0, SEEK_END);
-	unsigned long len = (unsigned long) ftell(f);
-	fclose(f);
-	return len;
+	return PAGE_SIZE;
 }
 
 Page::Page() {
 	this->data = (void *) malloc(PAGE_SIZE);
 	this->setFreeSpaceOffset(0);
 	this->setNumberOfSlots(0);
+	isDirty = false;
 }
 
 Page::Page(void * data) {
 	this->data = data;
+	this->isDirty = false;
+}
+
+Page::Page(void* data, int id) {
+    this->data = data;
+    this->id = id;
 }
 
 Page::~Page() {
 	freeIfNotNull(this->data);
-
 }
 
 int Page::getBytes() {
@@ -496,10 +528,32 @@ PagedFile::PagedFile(string fileName) {
 	this->name = fileName;
 	this->numberOfPages = 0;
 	this->handle = 0;
+    this->pagesCache = new Cache<Page*>(PAGES_CACHE_SIZE);
 }
 
 
 PagedFile::~PagedFile() {
+	this->serializeToOffset(this->name, 0, PAGE_SIZE);
+	for(int i=0; i< PAGES_CACHE_SIZE; i++) {
+		Page* page = this->pagesCache->get(i);
+		if(page != 0) {
+			if(page->isDirty)
+				page->serializeToOffset(this->name, this->getPageStartOffsetByIndex(page->id), PAGE_SIZE);
+			delete page;
+		}
+	}
+	delete this->pagesCache;
+}
+
+RC PagedFile::insertPageInCache(Page* page) {
+	Page* pageAlreadyInCache = this->pagesCache->get(page->id);
+	if(pageAlreadyInCache != 0) {
+		if(pageAlreadyInCache->id != page->id && pageAlreadyInCache->isDirty) {
+			pageAlreadyInCache->serializeToOffset(this->name, this->getPageStartOffsetByIndex(pageAlreadyInCache->id), PAGE_SIZE);
+		}
+		delete pageAlreadyInCache;
+	}
+	this->pagesCache->set(page->id, page);
 }
 
 int PagedFile::setFileHandle(FileHandle *fileHandle) {
@@ -631,7 +685,7 @@ int InternalRecord::getInternalRecordBytes(const vector<Attribute> &recordDescri
 			}
 
 	}
-	freeIfNotNull(nullBits);
+	freeIfNotNull((void*&)nullBits);
 	return size;
 }
 
@@ -683,7 +737,7 @@ InternalRecord* InternalRecord::parse(const vector<Attribute> &recordDescriptor,
 	memcpy(internalCursor + numberOfAttributes*sizeof(unsigned short), &insertionOffset, sizeof(unsigned short));
 
 	record->data = internalData;
-	freeIfNotNull(nullBits);
+	freeIfNotNull((void*&)nullBits);
 	return record;
 }
 
@@ -732,7 +786,7 @@ RC InternalRecord::unParse(const vector<Attribute> &recordDescriptor, void* data
 		cursor += length;
 		}
 	}
-	freeIfNotNull (nullBits);
+	freeIfNotNull ((void*&)nullBits);
 	return 0;
 }
 
@@ -756,7 +810,7 @@ RC InternalRecord::getAttributeByIndex(const int &index, const vector<Attribute>
 	}
 	memcpy(attributeCursor, startCursor + offsetFromStart, numberOfBytes);
 	isNull = *(nullBits+index);
-	freeIfNotNull(nullBits);
+	freeIfNotNull((void*&)nullBits);
 	return 0;
 }
 
@@ -903,6 +957,14 @@ VarcharParser::VarcharParser(){
 	this->data = 0;
 }
 
+VarcharParser::VarcharParser(void * data){
+	this->data = data;
+}
+
+VarcharParser::~VarcharParser() {
+	freeIfNotNull(this->data);
+}
+
 VarcharParser* VarcharParser::parse(const string &str) {
 	VarcharParser* varcharParser = new VarcharParser();
 	int length = str.size();
@@ -923,4 +985,33 @@ RC VarcharParser::unParse(string &str){
 	return 0;
 };
 
+template<class Value>
+Cache<Value>::Cache(int size) {
+	this->size = size;
+	this->internal_cache = unordered_map<int, Value>();
+}
 
+template<class Value>
+Cache<Value>::~Cache() {
+}
+
+template<class Value>
+int Cache<Value>::hashCode(int key){
+	return key%(this->size);
+}
+
+template<class Value>
+Value Cache<Value>::get(int k) {
+	int offset = this->hashCode(k);
+	if(this->internal_cache.find(offset) != this->internal_cache.end()) {
+        return this->internal_cache[offset];
+    }
+    return 0;
+}
+
+template<class Value>
+int Cache<Value>::set(int k, Value &v) {
+	int offset = this->hashCode(k);
+	this->internal_cache[offset] = v;
+	return 0;
+}

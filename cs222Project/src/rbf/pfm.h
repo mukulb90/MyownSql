@@ -8,8 +8,10 @@
 #include <sstream>
 #include <iostream>
 #include <math.h>
+#include <unordered_map>
 
-#define FILE_HANDLE_SERIALIZATION_LOCATION  "access_stats.data";
+#define FILE_HANDLE_SERIALIZATION_LOCATION  "access_stats.data"
+#define PAGES_CACHE_SIZE 100
 
 using namespace std;
 
@@ -17,6 +19,21 @@ using namespace std;
 #include <climits>
 #define PAGE_SIZE 4096
 #define FORWARDER_SIZE 12
+
+template <class Value>
+class Cache {
+private:
+	int size;
+	unordered_map<int, Value> internal_cache;
+	int hashCode(int key);
+
+public:
+	Cache(int size);
+	~Cache();
+	Value get(int k);
+	int set(int k, Value &v);
+
+};
 
 using namespace std;
 
@@ -120,9 +137,12 @@ public :
 class Page: public Serializable {
 public:
 	void * data;
-
+    int id;
+    bool isDirty = false;
 	Page();
 	Page(void * data);
+    Page(void * data, int id);
+
 	~Page();
 
 	RecordForwarder* getRecord(const RID &rid);
@@ -180,12 +200,14 @@ public:
 	string name;
 	int numberOfPages;
 	FileHandle* handle;
+    Cache<Page*> * pagesCache;
 
 
 	PagedFile(string fileName);
 	~PagedFile();
 
 	Page* getPageByIndex(int index);
+	RC insertPageInCache(Page*);
 	int getBytes();
 	int getNumberOfPages();
 	int mapFromObject(void* data);
@@ -224,20 +246,17 @@ bool* getNullBits(const vector<Attribute> &recordDescriptor, const void* data);
 
 class VarcharParser {
 private:
-	VarcharParser();
 public:
 	void* data;
+
+	VarcharParser();
+	VarcharParser(void*);
 	~VarcharParser();
 
 	static VarcharParser* parse(const string &str);
 	RC unParse(string &str);
 };
 
-void freeIfNotNull(void * data);
-//{
-//	if(data!=0){
-//		free(data);
-//		data = 0 ;
-//	}
-//}
+void freeIfNotNull(void * &data);
+float compare(const void* to, const void* from, const Attribute &attr, bool isNullBitsInTo, bool isNullBitsInFrom);
 #endif

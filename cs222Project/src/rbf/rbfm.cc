@@ -1,5 +1,4 @@
 #include "rbfm.h"
-
 #include <math.h>
 #include <stdlib.h>
 #include <bitset>
@@ -155,7 +154,7 @@ RC RecordBasedFileManager::printRecord(const vector<Attribute> &recordDescriptor
 		int k = int(i/8);
 		*(nullarr+i) = nullstream[k] & (1<<(7 - i%8));
 	}
-	free(nullstream);
+	freeIfNotNull((void*&)nullstream);
 
 	cursor += nullBytes;
 	cout << "Record:-";
@@ -245,32 +244,46 @@ RC RecordBasedFileManager::scan(FileHandle &fileHandle,
 	return 0;
 }
 
-
-int compare(const void* to, const void* from, const Attribute &attr) {
+float compare(const void* to, const void* from, const Attribute &attr, bool isNullBitsInTo, bool isNullBitsInFrom) {
 	char * fromCursor = (char*) from;
 	char * toCursor = (char*) to;
-//	unsigned char toNullByte = *toCursor;
-//	unsigned char fromNullByte = *fromCursor;
-//	if(toNullByte == 128 && fromNullByte == 128){
-//		return 0;
-//	}
-//	fromCursor +=1;
-	toCursor +=1;
+
+	if(isNullBitsInTo) {
+		toCursor +=1;
+	}
+
+	if(isNullBitsInFrom) {
+		fromCursor += 1;
+	}
+
+	if(from == NULL && to == NULL) {
+		return 0;
+	}
+
+	if(from == NULL) {
+		return -1;
+	}
+
+	if(to == NULL) {
+		return 1;
+	}
 
 	if (attr.type == TypeInt) {
 		int fromValue = *((int*) fromCursor);
 		int toValue = *((int*) toCursor);
-		return fromValue - toValue;
+		float floatFromValue = (float)fromValue;
+		float floatToValue = (float) toValue;
+		return floatFromValue - floatToValue;
 	} else if (attr.type == TypeReal) {
 		float fromValue = *((float*) fromCursor);
 		float toValue = *((float*) toCursor);
 		return fromValue - toValue;
 	} else {
-//		int fromLength = *((int*)fromCursor);
 		int toLength = *((int*)toCursor);
-//		fromCursor += sizeof(int);
 		toCursor += sizeof(int);
-		string fromString = string(fromCursor);
+        int fromLength = *(int*)fromCursor;
+        fromCursor += sizeof(int);
+		string fromString = string(fromCursor, fromLength);
 		string toString = string(toCursor, toLength);
 		return fromString.compare(toString);
 	}
@@ -363,7 +376,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 				switch (this->compOp) {
 								case EQ_OP: {
 									if (compare(compAttrValue, this->value,
-											this->conditionAttribute) == 0) {
+											this->conditionAttribute, true, false) == 0) {
 										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
 										returnedRid.pageNum = rid.pageNum;
 										returnedRid.slotNum = rid.slotNum;
@@ -374,7 +387,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 								}
 								case LE_OP: {
 									if (compare(compAttrValue, this->value,
-											this->conditionAttribute) >= 0) {
+											this->conditionAttribute, true, false) >= 0) {
 										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
 										returnedRid.pageNum = rid.pageNum;
 										returnedRid.slotNum = rid.slotNum;
@@ -385,7 +398,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 								}
 								case LT_OP: {
 									if (compare(compAttrValue, this->value,
-											this->conditionAttribute) > 0) {
+											this->conditionAttribute, true, false) > 0) {
 										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
 										returnedRid.pageNum = rid.pageNum;
 										returnedRid.slotNum = rid.slotNum;
@@ -396,7 +409,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 								}
 								case GT_OP: {
 									if (compare(compAttrValue, this->value,
-											this->conditionAttribute) < 0) {
+											this->conditionAttribute, true, false) < 0) {
 										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
 										returnedRid.pageNum = rid.pageNum;
 										returnedRid.slotNum = rid.slotNum;
@@ -407,7 +420,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 								}
 								case GE_OP: {
 									if (compare(compAttrValue, this->value,
-											this->conditionAttribute) <= 0) {
+											this->conditionAttribute, true, false) <= 0) {
 										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
 										returnedRid.pageNum = rid.pageNum;
 										returnedRid.slotNum = rid.slotNum;
@@ -418,7 +431,7 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 								}
 								case NE_OP: {
 									if (compare(compAttrValue, this->value,
-											this->conditionAttribute) != 0) {
+											this->conditionAttribute, true, false) != 0) {
 										rbfm->internalReadAttributes(this->fileHandle, this->recordDescriptors, duplicateRid, this->attributeNames, data, this->versionId);
 										returnedRid.pageNum = rid.pageNum;
 										returnedRid.slotNum = rid.slotNum;
@@ -654,14 +667,14 @@ RC RecordBasedFileManager::shiftRecords(int &currRecordOffset, int &currRecordSi
 	int rightSideDataSize = FreeSpaceOffset - currRecordOffset - currRecordSize;
 
 	///
-	void* buffer = malloc(4096);
+	void* buffer = malloc(PAGE_SIZE);
 	memcpy((char*) buffer,
 			(char*) page.data + currRecordOffset + currRecordSize,
 			rightSideDataSize);
 
 	memcpy((char*) page.data + currRecordOffset, (char*) buffer,
 			rightSideDataSize);
-	free(buffer);
+	freeIfNotNull(buffer);
 	return 0;
 }
 
@@ -736,7 +749,7 @@ RC RecordBasedFileManager::internalUpdateRecord(FileHandle &fileHandle,
 
 		int FreeSpaceOffset = page.getFreeSpaceOffset();
 		int rightSideDataSize = FreeSpaceOffset - rOffset- rSize;
-		void *buffer = malloc(4096);
+		void *buffer = malloc(PAGE_SIZE);
 		memcpy((char*)buffer, (char*)page.data + rOffset + rSize, rightSideDataSize);
 		memcpy((char*)page.data + rOffset+FORWARDER_SIZE, (char*)buffer, rightSideDataSize);
 
@@ -777,7 +790,7 @@ RC RecordBasedFileManager::shiftNUpdateRecord(Page &page, int threshold_new,
 	//shiftRecords(rOffset,rSize,page);
 	int FreeSpaceOffset = page.getFreeSpaceOffset();
 	int rightSideDataSize = FreeSpaceOffset - rOffset- rSize;
-	void* buffer = malloc(4096);
+	void* buffer = malloc(PAGE_SIZE);
 	memcpy((char*)buffer, (char*)page.data + rOffset + rSize, rightSideDataSize);
 
 	memcpy((char*)page.data + rOffset + rSize + threshold_new, (char*)buffer, rightSideDataSize);
@@ -785,7 +798,7 @@ RC RecordBasedFileManager::shiftNUpdateRecord(Page &page, int threshold_new,
 
 	page.setSlot(slotNumber, rOffset, recordSize);
 	page.setFreeSpaceOffset(page.getFreeSpaceOffset() + threshold_new);
-	free(buffer);
+	freeIfNotNull(buffer);
 	return 0;
 }
 
