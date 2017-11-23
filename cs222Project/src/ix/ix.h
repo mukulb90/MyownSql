@@ -114,9 +114,9 @@ public:
 class Entry {
 public:
 	void* data;
-	Attribute attr;
-
-	virtual const void* getKey() = 0;
+	Attribute* attr;
+    ~Entry() = default;
+    virtual const void* getKey() = 0;
 	virtual int getEntrySize() = 0;
 	virtual int getSpaceNeededToInsert() = 0;
     int getPageNum();
@@ -138,14 +138,15 @@ class LeafEntry: public Entry {
 
 public:
 
-	LeafEntry(void* data, Attribute &attr);
+	LeafEntry(void* data, Attribute *attr);
+    ~LeafEntry() = default;
 	const void* getKey();
 	int getEntrySize();
 	int getSpaceNeededToInsert();
 
-	static LeafEntry* parse(Attribute &attr,const void* key, const int &pageNum,const int &slotNum);
-	static int getSize(Attribute &attr,const void* key);
-	RC unparse(Attribute &attr, void* key, int &pageNum, int &slotNum);
+	static LeafEntry* parse(Attribute *attr,const void* key, const int &pageNum,const int &slotNum);
+	static int getSize(Attribute *attr,const void* key);
+	RC unparse(Attribute *attr, void* key, int &pageNum, int &slotNum);
 	Entry* getNextEntry();
 	string toJson();
 	void setPageNum(int &pageNum);
@@ -158,16 +159,16 @@ public:
 class AuxiloryEntry: public Entry {
 
 public:
-	AuxiloryEntry(void* data, Attribute &attr);
-
+	AuxiloryEntry(void* data, Attribute *attr);
+    ~AuxiloryEntry() = default;
 	const void* getKey();
 	int getEntrySize();
 	int getSpaceNeededToInsert();
 	Entry* getNextEntry();
 
-	static AuxiloryEntry* parse(Attribute &attr,const void* key,const int pageNum,const int slotNum, const int &rightPointer);
-	static int getSize(Attribute &attr, void* key);
-	RC unparse(Attribute &attr, void* key, int &pageNum, int &slotNum, int &rightPointer);
+	static AuxiloryEntry* parse(Attribute *attr,const void* key,const int pageNum,const int slotNum, const int &rightPointer);
+	static int getSize(Attribute *attr, void* key);
+	RC unparse(Attribute *attr, void* key, int &pageNum, int &slotNum, int &rightPointer);
 	string toJson();
 
 	void setRightPointer(int &rightPointer);
@@ -180,21 +181,21 @@ class Node {
 
 protected:
 	//	This constructor is used to create a node if nodeId is known
-	Node(const int &id, const Attribute &attr, const FileHandle *fileHandle);
+	Node(const int &id, const Attribute *attr, const FileHandle *fileHandle);
 	Node(const int &id, const FileHandle *fileHandle);
 public:
 
 	int id;
 	void* data;
-	Attribute attr;
+	Attribute* attr;
 	FileHandle* fileHandle;
 
 //	This constructor is used to create a new Node
-	Node(const Attribute &attr, const FileHandle *fileHandle);
+	Node(const Attribute *attr, const FileHandle *fileHandle);
 
 	~Node();
 
-	static Node* getInstance(const int &id, const Attribute &attr, const FileHandle *fileHandle);
+	static Node* getInstance(const int &id, const Attribute *attr, const FileHandle *fileHandle);
 
 	RC insertEntry(Entry* entry);
 	RC internalInsert(void* cursor, Entry* entry);
@@ -225,8 +226,8 @@ class LeafNode: public Node {
 
 public:
 	LeafNode(int id, const FileHandle *fileHandle);
-	LeafNode(const Attribute &attr, const FileHandle *fileHandle);
-	LeafNode(const int &id, const Attribute &attr, const FileHandle *fileHandle);
+	LeafNode(const Attribute *attr, const FileHandle *fileHandle);
+	LeafNode(const int &id, const Attribute *attr, const FileHandle *fileHandle);
 	~LeafNode();
 
 	//	This method splits the Node into two splits and equally distributes the entries between both nodes
@@ -247,10 +248,10 @@ public:
 class AuxiloryNode: public Node {
 
 public:
-	AuxiloryNode(const Attribute &attr,
+	AuxiloryNode(const Attribute *attr,
 				const FileHandle *fileHandle);
 
-	AuxiloryNode(const int &id, const Attribute &attr,
+	AuxiloryNode(const int &id, const Attribute *attr,
 			const FileHandle *fileHandle);
 	AuxiloryNode(const int &id, const FileHandle *fileHandle);
 
@@ -269,15 +270,15 @@ class Graph {
 public:
     AuxiloryNode* internalRoot;
 //    AuxiloryNode* root;
-	Attribute attr;
+	Attribute* attr;
 	FileHandle* fileHandle;
 
 	Graph(const FileHandle *fileHandle);
-	Graph(const FileHandle *fileHandle, const Attribute& attr);
+	Graph(const FileHandle *fileHandle, const Attribute* attr);
 	~Graph();
 
 	static Graph* instance(const FileHandle *fileHandle);
-	static Graph* instance(const FileHandle *fileHandle, const Attribute &attr);
+	static Graph* instance(const FileHandle *fileHandle, const Attribute *attr);
 
     Node* getRoot();
     void setRoot(AuxiloryNode* root);
