@@ -34,6 +34,8 @@ public:
 // Relation Manager
 class RelationManager
 {
+private:
+    FileHandle* fileHandle;
 public:
 
   unordered_map<string, vector<Attribute>> tableNameToRecordDescriptorMap;
@@ -49,6 +51,8 @@ public:
 
   RC deleteCatalog();
 
+  FileHandle*  getFileHandle();
+
   void printTable(string tableName);
 
   RC createTable(const string &tableName, const vector<Attribute> &attrs);
@@ -63,11 +67,17 @@ public:
 
   RC insertTuple(const string &tableName, const void *data, RID &rid);
 
-  RC deleteTuple(const string &tableName, const RID &rid);
+	RC internalInsertTuple(const string &tableName, const void *data, RID &rid);
+
+    RC internalDeleteTuple(const string &tableName, const RID &rid);
+
+    RC deleteTuple(const string &tableName, const RID &rid);
 
   RC updateTuple(const string &tableName, const void *data, const RID &rid);
 
-  RC readTuple(const string &tableName, const RID &rid, void *data);
+	RC internalUpdateTuple(const string &tableName, const void *data, const RID &rid);
+
+	RC readTuple(const string &tableName, const RID &rid, void *data);
 
   // Print a tuple that is passed to this utility method.
   // The format is the same as printRecord().
@@ -89,6 +99,10 @@ public:
   RC addAttribute(const string &tableName, const Attribute &attr);
 
   RC dropAttribute(const string &tableName, const string &attributeName);
+
+  RC internalAddAttribute(const string &tableName, const Attribute &attr);
+
+  RC internalDropAttribute(const string &tableName, const string &attributeName);
 
 
 protected:

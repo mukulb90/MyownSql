@@ -447,12 +447,12 @@ RC RelationManager::deleteTable(const string &tableName)
 	delete iterator1;
 	for (int i = 0; i < RIDVector.size(); i++) {
 		ridColumn = RIDVector.at(i);
-		this->deleteTuple(COLUMNS_CATALOG_NAME, ridColumn);
+		this->internalDeleteTuple(COLUMNS_CATALOG_NAME, ridColumn);
 
 	}
 
 	// Drop table
-	this->deleteTuple(TABLE_CATALOG_NAME, rid);
+	this->internalDeleteTuple(TABLE_CATALOG_NAME, rid);
 	this->invalidateCache(tableName);
 	return 0;
 }
@@ -552,7 +552,7 @@ RC RelationManager::getAttributesVector(const string &tableName, vector<vector<A
 	if(this->tableNameToRecordDescriptorsMap.find(tableName) != this->tableNameToRecordDescriptorsMap.end()) {
 			recordDescriptors = this->tableNameToRecordDescriptorsMap[tableName];
 			return 0;
-		}
+    }
 	int rc;
 	RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
 	map<int, map<int, Attribute>> versionToRecordDescriptorMap;
@@ -610,12 +610,17 @@ RC RelationManager::getAttributesVector(const string &tableName, vector<vector<A
 	    return 0;
 }
 
-RC RelationManager::insertTuple(const string &tableName, const void *data, RID &rid)
+RC RelationManager::insertTuple(const string &tableName, const void *data, RID &rid) {
+    bool isSystemTable = RelationManager::isSystemTable(tableName);
+    if(isSystemTable) {
+        return -1;
+    }
+    return this->internalInsertTuple(tableName, data, rid);
+}
+
+
+RC RelationManager::internalInsertTuple(const string &tableName, const void *data, RID &rid)
 {
-	bool isSystemTable = RelationManager::isSystemTable(tableName);
-	if(isSystemTable) {
-		return -1;
-	}
 	int rc;
 	vector<vector<Attribute>> recordDescriptors;
 	FileHandle fileHandle;
@@ -635,31 +640,39 @@ RC RelationManager::insertTuple(const string &tableName, const void *data, RID &
 	return rbfm->closeFile(fileHandle);
 }
 
-RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
-{
-	bool isSystemTable = RelationManager::isSystemTable(tableName);
-	if(isSystemTable) {
-		return -1;
-	}
-	RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
-	FileHandle fileHandle;
-	rbfm->openFile(tableName, fileHandle);
-	vector<Attribute> recordDescriptor;
-	this->getAttributes(tableName, recordDescriptor);
-	int rc = rbfm->deleteRecord(fileHandle, recordDescriptor, rid);
+RC RelationManager::internalDeleteTuple(const string &tableName, const RID &rid) {
+    RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
+    FileHandle fileHandle;
+    rbfm->openFile(tableName, fileHandle);
+    vector<Attribute> recordDescriptor;
+    this->getAttributes(tableName, recordDescriptor);
+    int rc = rbfm->deleteRecord(fileHandle, recordDescriptor, rid);
     if(rc == -1) {
         return rc;
     }
     rc = rbfm->closeFile(fileHandle);
-	return rc;
+    return rc;
 }
 
-RC RelationManager::updateTuple(const string &tableName, const void *data, const RID &rid)
-{
+
+RC RelationManager::deleteTuple(const string &tableName, const RID &rid) {
+    bool isSystemTable = RelationManager::isSystemTable(tableName);
+    if (isSystemTable) {
+        return -1;
+    }
+    return this->internalDeleteTuple(tableName, rid);
+}
+
+RC RelationManager::updateTuple(const string &tableName, const void *data, const RID &rid){
 	bool isSystemTable = RelationManager::isSystemTable(tableName);
 	if(isSystemTable) {
 		return -1;
 	}
+	return this->internalUpdateTuple(tableName, data, rid);
+}
+
+RC RelationManager::internalUpdateTuple(const string &tableName, const void *data, const RID &rid)
+{
 	int rc;
     RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
     FileHandle fileHandle;
@@ -802,13 +815,13 @@ RC RelationManager::dropAttribute(const string &tableName, const string &attribu
 	for(int i=0; i< newRecordDescriptor.size(); i++) {
 		tempAttr = newRecordDescriptor[i];
 		columnsCatalogRecord = ColumnsCatalogRecord::parse(tableId, tempAttr, i, versionId+1);
-		this->insertTuple(COLUMNS_CATALOG_NAME, columnsCatalogRecord->data, rid);
+		this->internalInsertTuple(COLUMNS_CATALOG_NAME, columnsCatalogRecord->data, rid);
 		delete columnsCatalogRecord;
 	}
 
 	RM_ScanIterator *iter = new RM_ScanIterator();
-
-	this->scan(TABLE_CATALOG_NAME, "table-name", EQ_OP, (void*)tableName.c_str(), projections, *iter);
+	VarcharParser *vp = VarcharParser::parse(tableName);
+	this->scan(TABLE_CATALOG_NAME, "table-name", EQ_OP, vp->data , projections, *iter);
 	RID tablesRowRid;
 	rc = iter->getNextTuple(tablesRowRid, record);
 
@@ -818,7 +831,7 @@ RC RelationManager::dropAttribute(const string &tableName, const string &attribu
 	}
 	delete (iter);
 	freeIfNotNull(record);
-	rc = this->updateTuple(TABLE_CATALOG_NAME, newRecord->data, tablesRowRid);
+	rc = this->internalUpdateTuple(TABLE_CATALOG_NAME, newRecord->data, tablesRowRid);
 	delete newRecord;
 	this->invalidateCache(tableName);
 	return rc;
@@ -849,13 +862,14 @@ RC RelationManager::addAttribute(const string &tableName, const Attribute &attr)
 	for(int i=0; i< currentRecordDescriptor.size(); i++) {
 		tempAttr = currentRecordDescriptor[i];
 		columnsCatalogRecord = ColumnsCatalogRecord::parse(tableId, tempAttr, i, versionId+1);
-		this->insertTuple(COLUMNS_CATALOG_NAME, columnsCatalogRecord->data, rid);
+		this->internalInsertTuple(COLUMNS_CATALOG_NAME, columnsCatalogRecord->data, rid);
 		delete columnsCatalogRecord;
 	}
 
 	RM_ScanIterator *iter = new RM_ScanIterator();
 
-	this->scan(TABLE_CATALOG_NAME, "table-name", EQ_OP, (void*)tableName.c_str(), projections, *iter);
+	VarcharParser *varcharParser = VarcharParser::parse(tableName);
+	this->scan(TABLE_CATALOG_NAME, "table-name", EQ_OP, varcharParser->data, projections, *iter);
 	RID tablesRowRid;
 	rc = iter->getNextTuple(tablesRowRid, record);
 
@@ -863,7 +877,7 @@ RC RelationManager::addAttribute(const string &tableName, const Attribute &attr)
 	if(rc == -1) {
 		return rc;
 	}
-	rc = this->updateTuple(TABLE_CATALOG_NAME, newRecord->data, tablesRowRid);
+	rc = this->internalUpdateTuple(TABLE_CATALOG_NAME, newRecord->data, tablesRowRid);
 	delete iter;
 	freeIfNotNull(record);
 	delete newRecord;

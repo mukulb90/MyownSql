@@ -795,10 +795,10 @@ RC InternalRecord::getAttributeByIndex(const int &index, const vector<Attribute>
 	Attribute attr = recordDescriptor[index];
 	char * cursor = (char *)this->data;
 	char * startCursor = (char *)this->data;
+	cursor += sizeof(int);
+	cursor += sizeof(int);
 	int numberOfNullBytes = getNumberOfNullBytes(recordDescriptor);
-	bool* nullBits = getNullBits(recordDescriptor, this->data);
-	cursor += sizeof(int);
-	cursor += sizeof(int);
+	bool* nullBits = getNullBits(recordDescriptor, cursor);
 	cursor += numberOfNullBytes;
 	unsigned short offsetFromStart = *(unsigned short*)(cursor + sizeof(unsigned short)*index);
 	unsigned short nextOffsetFromStart = *(unsigned short*)(cursor + sizeof(unsigned short)*(index+1));
