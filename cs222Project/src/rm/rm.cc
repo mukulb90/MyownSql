@@ -376,6 +376,7 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
 		delete columnsCatalogRecord;
 
 	}
+	rbfm->closeFile(fileHandle);
     return 0;
 }
 
@@ -407,8 +408,8 @@ RC RelationManager::deleteTable(const string &tableName)
 	projections.push_back(tableIdAttr.name);
 	projectedAttribute.push_back(tableIdAttr);
 
-	rbfm->scan(fileHandle, tableCatalogAttrs, tableNameAttr.name, EQ_OP,
-			(void*) tableName.c_str(), projections, *iterator);
+	VarcharParser* vp = VarcharParser::parse(tableName);
+	rbfm->scan(fileHandle, tableCatalogAttrs, tableNameAttr.name, EQ_OP, vp->data, projections, *iterator);
 	int rc = iterator->getNextRecord(rid, tablesCatalogRecord);
 	delete iterator;
 	if(rc == -1) {
@@ -451,7 +452,7 @@ RC RelationManager::deleteTable(const string &tableName)
 	}
 
 	// Drop table
-	this->deleteTuple(TABLE_CATALOG_NAME,rid);
+	this->deleteTuple(TABLE_CATALOG_NAME, rid);
 	this->invalidateCache(tableName);
 	return 0;
 }
@@ -474,7 +475,8 @@ RC RelationManager:: getTableDetailsByName(const string &tableName, int &tableId
 		projections.push_back(tableversionAttr.name);
 		projectedAttribute.push_back(tableIdAttr);
 		projectedAttribute.push_back(tableversionAttr);
-		rbfm->scan(fileHandle, tableCatalogAttrs, tableNameAttr.name, EQ_OP, (void*)tableName.c_str(), projections, *iterator);
+		VarcharParser * vp = VarcharParser::parse(tableName);
+		rbfm->scan(fileHandle, tableCatalogAttrs, tableNameAttr.name, EQ_OP, vp->data, projections, *iterator);
 		int rc = iterator->getNextRecord(rid, tablesCatalogRecord);
 		delete iterator;
 		if(rc == -1) {
@@ -610,6 +612,10 @@ RC RelationManager::getAttributesVector(const string &tableName, vector<vector<A
 
 RC RelationManager::insertTuple(const string &tableName, const void *data, RID &rid)
 {
+	bool isSystemTable = RelationManager::isSystemTable(tableName);
+	if(isSystemTable) {
+		return -1;
+	}
 	int rc;
 	vector<vector<Attribute>> recordDescriptors;
 	FileHandle fileHandle;
@@ -622,21 +628,38 @@ RC RelationManager::insertTuple(const string &tableName, const void *data, RID &
 	this->getAttributesVector(tableName, recordDescriptors);
 	RecordBasedFileManager *rbfm = RecordBasedFileManager::instance();
 	rbfm->openFile(tableName, fileHandle);
-	return rbfm->internalInsertRecord(fileHandle, recordDescriptors, data, rid, currentVersion, 0);
+	rc = rbfm->internalInsertRecord(fileHandle, recordDescriptors, data, rid, currentVersion, 0);
+	if(rc == -1) {
+		return rc;
+	}
+	return rbfm->closeFile(fileHandle);
 }
 
 RC RelationManager::deleteTuple(const string &tableName, const RID &rid)
 {
+	bool isSystemTable = RelationManager::isSystemTable(tableName);
+	if(isSystemTable) {
+		return -1;
+	}
 	RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
 	FileHandle fileHandle;
 	rbfm->openFile(tableName, fileHandle);
 	vector<Attribute> recordDescriptor;
 	this->getAttributes(tableName, recordDescriptor);
-	return rbfm->deleteRecord(fileHandle, recordDescriptor, rid);
+	int rc = rbfm->deleteRecord(fileHandle, recordDescriptor, rid);
+    if(rc == -1) {
+        return rc;
+    }
+    rc = rbfm->closeFile(fileHandle);
+	return rc;
 }
 
 RC RelationManager::updateTuple(const string &tableName, const void *data, const RID &rid)
 {
+	bool isSystemTable = RelationManager::isSystemTable(tableName);
+	if(isSystemTable) {
+		return -1;
+	}
 	int rc;
     RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
     FileHandle fileHandle;
@@ -648,7 +671,11 @@ RC RelationManager::updateTuple(const string &tableName, const void *data, const
     }
     vector<vector<Attribute>> recordDescriptors;
     this->getAttributesVector(tableName, recordDescriptors);
-    return rbfm->internalUpdateRecord(fileHandle, recordDescriptors, data, rid, versionId);
+    rc = rbfm->internalUpdateRecord(fileHandle, recordDescriptors, data, rid, versionId);
+    if(rc == -1) {
+        return rc;
+    }
+    return rbfm->closeFile(fileHandle);
 }
 
 RC RelationManager::readTuple(const string &tableName, const RID &rid, void *data)
@@ -671,8 +698,13 @@ RC RelationManager::readTuple(const string &tableName, const RID &rid, void *dat
 		attr = attrs[i];
 		attributeNames.push_back(attr.name);
 	}
-    return rbfm->internalReadAttributes(fileHandle, recordDescriptors, rid,
+    rc = rbfm->internalReadAttributes(fileHandle, recordDescriptors, rid,
     		attributeNames, data, versionId);
+    if(rc == -1) {
+        return rc;
+    }
+    rc = rbfm->closeFile(fileHandle);
+    return rc;
 }
 
 RC RelationManager::printTuple(const vector<Attribute> &attrs, const void *data)
@@ -696,7 +728,11 @@ RC RelationManager::readAttribute(const string &tableName, const RID &rid, const
 	vector<Attribute> attrs;
 	vector<string> attributeNames;
 	this->getAttributesVector(tableName, recordDescriptors);
-	return rbfm->internalReadAttribute(fileHandle, recordDescriptors, rid, attributeName, data, versionId);
+	rc = rbfm->internalReadAttribute(fileHandle, recordDescriptors, rid, attributeName, data, versionId);
+    if(rc == -1) {
+        return rc;
+    }
+    return rbfm->closeFile(fileHandle);
 }
 
 RC RelationManager::scan(const string &tableName,
@@ -708,11 +744,11 @@ RC RelationManager::scan(const string &tableName,
 {
 	int rc;
    RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
-   FileHandle fileHandle = FileHandle();
+   FileHandle* fileHandle = new FileHandle();
    vector<vector<Attribute>> recordDescriptors;
    RBFM_ScanIterator* rbfm_ScanIterator = new RBFM_ScanIterator();
    RBFM_ScanIterator rbfm_ScanIteratorInstance = *rbfm_ScanIterator;
-   rbfm->openFile(tableName, fileHandle);
+   rbfm->openFile(tableName, *fileHandle);
    int tableId, versionId;
    	rc = this->getTableDetailsByName(tableName, tableId, versionId);
    	if(rc == -1) {
@@ -720,7 +756,7 @@ RC RelationManager::scan(const string &tableName,
    	}
    	this->getAttributesVector(tableName, recordDescriptors);
    	rm_ScanIterator.rbfmIterator = rbfm_ScanIterator;
-   	rbfm->internalScan(fileHandle, recordDescriptors, conditionAttribute, compOp, value, attributeNames, *rbfm_ScanIterator, versionId);
+   	rbfm->internalScan(*fileHandle, recordDescriptors, conditionAttribute, compOp, value, attributeNames, *rbfm_ScanIterator, versionId);
    //	delete rbfm_ScanIterator;
    	return 0;
 }
@@ -737,6 +773,10 @@ RC RM_ScanIterator::close() {
 // Extra credit work
 RC RelationManager::dropAttribute(const string &tableName, const string &attributeName)
 {
+	bool isSystemTable = RelationManager::isSystemTable(tableName);
+	if(isSystemTable) {
+		return -1;
+	}
 	vector<Attribute> currentRecordDescriptor;
 	vector<Attribute> newRecordDescriptor;
 	int rc, tableId, versionId;
@@ -787,6 +827,10 @@ RC RelationManager::dropAttribute(const string &tableName, const string &attribu
 // Extra credit work
 RC RelationManager::addAttribute(const string &tableName, const Attribute &attr)
 {
+	bool isSystemTable = RelationManager::isSystemTable(tableName);
+	if(isSystemTable) {
+		return -1;
+	}
 	vector<Attribute> currentRecordDescriptor;
 	int rc, tableId, versionId;
 	Attribute tempAttr;

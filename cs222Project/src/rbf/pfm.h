@@ -203,7 +203,7 @@ public:
     Cache<Page*> * pagesCache;
 
 
-	PagedFile(string fileName);
+	PagedFile(string fileName, FileHandle *fileHandle);
 	~PagedFile();
 
 	Page* getPageByIndex(int index);

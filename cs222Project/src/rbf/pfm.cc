@@ -53,7 +53,7 @@ RC PagedFileManager::createFile(const string &fileName) {
 	if (fileExists(fileName)) {
 		return -1;
 	}
-	PagedFile* file = new PagedFile(fileName);
+	PagedFile* file = new PagedFile(fileName, NULL);
 	file->serialize(fileName);
 	delete file;
 	return 0;
@@ -63,8 +63,6 @@ RC PagedFileManager::destroyFile(const string &fileName) {
 	if (!fileExists(fileName)) {
 		return -1;
 	}
-	PagedFile file = PagedFile(fileName);
-	file.deserialize(fileName);
 	return remove(fileName.c_str());
 }
 
@@ -78,10 +76,13 @@ RC PagedFileManager::openFile(const string &fileName, FileHandle &fileHandle) {
 		return -1;
 	}
 //	fclose(handle);
-	PagedFile* file = new PagedFile(fileName);
+	PagedFile* file = new PagedFile(fileName, &fileHandle);
 	file->deserialize(fileName);
 	if(strcmp(file->name.c_str(), fileName.c_str()) != 0) {
 		return -1;
+	}
+	if(fileHandle.file != NULL) {
+		delete fileHandle.file;
 	}
 	fileHandle.setPagedFile(file);
 	return 0;
@@ -89,7 +90,7 @@ RC PagedFileManager::openFile(const string &fileName, FileHandle &fileHandle) {
 
 RC PagedFileManager::closeFile(FileHandle &fileHandle) {
 	delete fileHandle.file;
-	fileHandle.setPagedFile(0);
+	fileHandle.setPagedFile(NULL);
 	return 0;
 }
 
@@ -122,6 +123,7 @@ RC FileHandle::readPage(PageNum pageNum, void *data) {
         return rc;
 
     } else {
+    	this->file->handle->readPageCounter++;
         memcpy(data, page->data, PAGE_SIZE);
         return 0;
     }
@@ -192,10 +194,6 @@ RC FileHandle::collectCounterValues(unsigned &readPageCount,
 
 void FileHandle::setPagedFile(PagedFile * pagedFile) {
 	this->file = pagedFile;
-	if(pagedFile != 0) {
-		FileHandle * handle = this;
-		pagedFile->setFileHandle(handle);
-	}
 }
 
 int FileHandle::getBytes() {
@@ -524,11 +522,12 @@ int Page::getRecordSize(const vector<Attribute> &recordDescriptor,
 }
 
 
-PagedFile::PagedFile(string fileName) {
+PagedFile::PagedFile(string fileName, FileHandle *fileHandle) {
 	this->name = fileName;
 	this->numberOfPages = 0;
 	this->handle = 0;
     this->pagesCache = new Cache<Page*>(PAGES_CACHE_SIZE);
+    this->handle = fileHandle;
 }
 
 
@@ -537,8 +536,9 @@ PagedFile::~PagedFile() {
 	for(int i=0; i< PAGES_CACHE_SIZE; i++) {
 		Page* page = this->pagesCache->get(i);
 		if(page != 0) {
-			if(page->isDirty)
+			if(page->isDirty){
 				page->serializeToOffset(this->name, this->getPageStartOffsetByIndex(page->id), PAGE_SIZE);
+			}
 			delete page;
 		}
 	}
@@ -566,7 +566,7 @@ Page* PagedFile::getPageByIndex(int index) {
 		return 0;
 	}
 	Page* page = new Page();
-	page->deserializeToOffset(this->name, this->getPageStartOffsetByIndex(index), PAGE_SIZE);
+	this->handle->readPage(index, page->data);
 	this->handle->readPageCounter++;
 	return page;
 }
