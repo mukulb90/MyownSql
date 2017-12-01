@@ -267,12 +267,23 @@ RelationManager* RelationManager::instance()
     return &_rm;
 }
 
+FileHandle* RelationManager::getFileHandle(){
+    if(this->fileHandle == NULL) {
+        this->fileHandle = new FileHandle();
+        cout << "DEBUG:" << "Creating new instance of file Handle" << endl;
+    }
+    return this->fileHandle;
+}
+
 RelationManager::RelationManager()
 {
 }
 
 RelationManager::~RelationManager()
 {
+    if(this->fileHandle != NULL){
+        RecordBasedFileManager::instance()->closeFile(*this->fileHandle);
+    }
 }
 
 RC RelationManager::invalidateCache(const string &tableName) {
@@ -454,6 +465,8 @@ RC RelationManager::deleteTable(const string &tableName)
 	// Drop table
 	this->internalDeleteTuple(TABLE_CATALOG_NAME, rid);
 	this->invalidateCache(tableName);
+	delete this->fileHandle->file;
+	this->fileHandle = NULL;
 	return 0;
 }
 
@@ -623,7 +636,7 @@ RC RelationManager::internalInsertTuple(const string &tableName, const void *dat
 {
 	int rc;
 	vector<vector<Attribute>> recordDescriptors;
-	FileHandle fileHandle;
+	FileHandle * fileHandle = this->getFileHandle();
 	int currentVersion;
 	int tableId;
 	rc = this->getTableDetailsByName(tableName, tableId, currentVersion);
@@ -632,25 +645,18 @@ RC RelationManager::internalInsertTuple(const string &tableName, const void *dat
 	}
 	this->getAttributesVector(tableName, recordDescriptors);
 	RecordBasedFileManager *rbfm = RecordBasedFileManager::instance();
-	rbfm->openFile(tableName, fileHandle);
-	rc = rbfm->internalInsertRecord(fileHandle, recordDescriptors, data, rid, currentVersion, 0);
-	if(rc == -1) {
-		return rc;
-	}
-	return rbfm->closeFile(fileHandle);
+	rbfm->openFile(tableName, *fileHandle);
+	rc = rbfm->internalInsertRecord(*fileHandle, recordDescriptors, data, rid, currentVersion, 0);
+	return rc;
 }
 
 RC RelationManager::internalDeleteTuple(const string &tableName, const RID &rid) {
     RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
-    FileHandle fileHandle;
-    rbfm->openFile(tableName, fileHandle);
+    FileHandle* fileHandle = this->getFileHandle();
+    rbfm->openFile(tableName, *fileHandle);
     vector<Attribute> recordDescriptor;
     this->getAttributes(tableName, recordDescriptor);
-    int rc = rbfm->deleteRecord(fileHandle, recordDescriptor, rid);
-    if(rc == -1) {
-        return rc;
-    }
-    rc = rbfm->closeFile(fileHandle);
+    int rc = rbfm->deleteRecord(*fileHandle, recordDescriptor, rid);
     return rc;
 }
 
@@ -675,8 +681,8 @@ RC RelationManager::internalUpdateTuple(const string &tableName, const void *dat
 {
 	int rc;
     RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
-    FileHandle fileHandle;
-    rbfm->openFile(tableName, fileHandle);
+    FileHandle *fileHandle = this->getFileHandle();
+    rbfm->openFile(tableName, *fileHandle);
     int tableId, versionId;
     rc = this->getTableDetailsByName(tableName, tableId, versionId);
     if(rc == -1) {
@@ -684,19 +690,16 @@ RC RelationManager::internalUpdateTuple(const string &tableName, const void *dat
     }
     vector<vector<Attribute>> recordDescriptors;
     this->getAttributesVector(tableName, recordDescriptors);
-    rc = rbfm->internalUpdateRecord(fileHandle, recordDescriptors, data, rid, versionId);
-    if(rc == -1) {
-        return rc;
-    }
-    return rbfm->closeFile(fileHandle);
+    rc = rbfm->internalUpdateRecord(*fileHandle, recordDescriptors, data, rid, versionId);
+    return rc;
 }
 
 RC RelationManager::readTuple(const string &tableName, const RID &rid, void *data)
 {
 	int rc;
 	RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
-	FileHandle fileHandle;
-	rbfm->openFile(tableName, fileHandle);
+	FileHandle* fileHandle = this->getFileHandle();
+	rbfm->openFile(tableName, *fileHandle);
 	int tableId, versionId;
 	rc = this->getTableDetailsByName(tableName, tableId, versionId);
 	if(rc == -1) {
@@ -711,12 +714,8 @@ RC RelationManager::readTuple(const string &tableName, const RID &rid, void *dat
 		attr = attrs[i];
 		attributeNames.push_back(attr.name);
 	}
-    rc = rbfm->internalReadAttributes(fileHandle, recordDescriptors, rid,
+    rc = rbfm->internalReadAttributes(*fileHandle, recordDescriptors, rid,
     		attributeNames, data, versionId);
-    if(rc == -1) {
-        return rc;
-    }
-    rc = rbfm->closeFile(fileHandle);
     return rc;
 }
 
@@ -730,8 +729,8 @@ RC RelationManager::readAttribute(const string &tableName, const RID &rid, const
 {
 	int rc;
 	RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
-	FileHandle fileHandle;
-	rbfm->openFile(tableName, fileHandle);
+	FileHandle* fileHandle = this->getFileHandle();
+	rbfm->openFile(tableName, *fileHandle);
 	int tableId, versionId;
 	rc = this->getTableDetailsByName(tableName, tableId, versionId);
 	if(rc == -1) {
@@ -741,11 +740,8 @@ RC RelationManager::readAttribute(const string &tableName, const RID &rid, const
 	vector<Attribute> attrs;
 	vector<string> attributeNames;
 	this->getAttributesVector(tableName, recordDescriptors);
-	rc = rbfm->internalReadAttribute(fileHandle, recordDescriptors, rid, attributeName, data, versionId);
-    if(rc == -1) {
-        return rc;
-    }
-    return rbfm->closeFile(fileHandle);
+	rc = rbfm->internalReadAttribute(*fileHandle, recordDescriptors, rid, attributeName, data, versionId);
+	return rc;
 }
 
 RC RelationManager::scan(const string &tableName,
@@ -757,7 +753,7 @@ RC RelationManager::scan(const string &tableName,
 {
 	int rc;
    RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
-   FileHandle* fileHandle = new FileHandle();
+   FileHandle* fileHandle = this->getFileHandle();
    vector<vector<Attribute>> recordDescriptors;
    RBFM_ScanIterator* rbfm_ScanIterator = new RBFM_ScanIterator();
    RBFM_ScanIterator rbfm_ScanIteratorInstance = *rbfm_ScanIterator;

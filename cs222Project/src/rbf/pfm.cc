@@ -11,18 +11,18 @@ void freeIfNotNull(void * &data){
 	}
 }
 
-unordered_map<string, FILE*> map;
+unordered_map<string, FILE*>* map = new unordered_map<string, FILE*>();
 
 FILE* getFileHandle(const string &fileName,string mode){
     string key = fileName + "-" + mode;
-    if(map.find(key) != map.end()) {
+    if(map->find(key) != map->end()) {
 //        cout << "Cache Hit" << endl;
-        return map[key];
+        return (*map)[key];
     } else {
 //        cout << "Cache MISS" << endl;
         FILE* file = fopen(fileName.c_str(), mode.c_str());
         if(file != NULL) {
-            map[key] = file;
+            (*map)[key] = file;
         }
         return file;
     }
@@ -67,6 +67,9 @@ RC PagedFileManager::destroyFile(const string &fileName) {
 }
 
 RC PagedFileManager::openFile(const string &fileName, FileHandle &fileHandle) {
+	if(fileHandle.file != NULL &&  fileHandle.file->name == fileName) {
+		return 0;
+	}
 	if (!fileExists(fileName)) {
 		return -1;
 	}
@@ -81,9 +84,7 @@ RC PagedFileManager::openFile(const string &fileName, FileHandle &fileHandle) {
 	if(strcmp(file->name.c_str(), fileName.c_str()) != 0) {
 		return -1;
 	}
-	if(fileHandle.file != NULL) {
-		delete fileHandle.file;
-	}
+	delete fileHandle.file;
 	fileHandle.setPagedFile(file);
 	return 0;
 }
@@ -113,6 +114,7 @@ FileHandle::~FileHandle() {
 RC FileHandle::readPage(PageNum pageNum, void *data) {
     Page* page = this->file->pagesCache->get(pageNum);
     if(page == 0 || page->id != pageNum) {
+    	this->file->missCounter++;
         int rc = this->internalReadPage(pageNum, data, true);
         if(rc == 0) {
             void * copyOfData = malloc(PAGE_SIZE);
@@ -123,6 +125,7 @@ RC FileHandle::readPage(PageNum pageNum, void *data) {
         return rc;
 
     } else {
+    	this->file->hitCounter++;
     	this->file->handle->readPageCounter++;
         memcpy(data, page->data, PAGE_SIZE);
         return 0;
@@ -526,6 +529,8 @@ PagedFile::PagedFile(string fileName, FileHandle *fileHandle) {
 	this->name = fileName;
 	this->numberOfPages = 0;
 	this->handle = 0;
+	this->hitCounter = 0;
+	this->missCounter = 0;
     this->pagesCache = new Cache<Page*>(PAGES_CACHE_SIZE);
     this->handle = fileHandle;
 }
@@ -533,6 +538,9 @@ PagedFile::PagedFile(string fileName, FileHandle *fileHandle) {
 
 PagedFile::~PagedFile() {
 	this->serializeToOffset(this->name, 0, PAGE_SIZE);
+	if(this->missCounter+this->hitCounter != 0)
+		cout << "Debug stats: " << this->hitCounter << " - " << this->missCounter << " Ratio: " << this->hitCounter*100/ (this->missCounter+this->hitCounter) << "%" << endl;
+
 	for(int i=0; i< PAGES_CACHE_SIZE; i++) {
 		Page* page = this->pagesCache->get(i);
 		if(page != 0) {

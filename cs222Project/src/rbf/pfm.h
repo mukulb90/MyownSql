@@ -201,7 +201,8 @@ public:
 	int numberOfPages;
 	FileHandle* handle;
     Cache<Page*> * pagesCache;
-
+    int hitCounter;
+    int missCounter;
 
 	PagedFile(string fileName, FileHandle *fileHandle);
 	~PagedFile();
