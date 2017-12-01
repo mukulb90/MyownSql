@@ -67,6 +67,72 @@ RC Filter::compareCondition(void *data){
 	return comparisonResult;
 }
 
+Project::Project(Iterator *input,const vector<string> &attrNames){
+	this->iterator = input;
+	vector <Attribute> attr;
+	this->iterator->getAttributes(attr);
+	for(string attrName :  attrNames){
+		for(int i=0; i< attr.size(); i++){
+			if(attr.at(i).name == attrName){
+				projectedAttr.push_back(attr.at(i));
+				break;
+			}
+		}
+	}
+}
+
+RC Project::getNextTuple(void* data){
+	bool isNull;
+	char* cursor = (char*) data;
+	vector <Attribute> attr;
+	this->iterator->getAttributes(attr);
+	void *nextTuple = calloc(1,PAGE_SIZE);
+	while(this->iterator->getNextTuple(nextTuple)!=EOF){
+		for(int i = 0; i<projectedAttr.size(); i++){
+			for(int index=0; index< attr.size(); index++){
+				if(attr.at(index).name == projectedAttr.at(i).name){
+					InternalRecord *ir = InternalRecord::parse(attr,nextTuple,0,false);
+					void *projectedData = calloc(1,PAGE_SIZE);
+					ir->getAttributeByIndex(index, attr, projectedData,isNull);
+						if(projectedAttr.at(i).type == TypeVarChar){
+							int length = 0;
+							memcpy(&length, projectedData, sizeof(int));
+							memcpy(cursor, projectedData, length+sizeof(int));
+							cursor = cursor + length+sizeof(int);
+							freeIfNotNull(projectedData);
+						}
+						else{
+							memcpy(cursor,projectedData, sizeof(int));
+							cursor = cursor+sizeof(int);
+							freeIfNotNull(projectedData);
+
+						}
+
+
+					}
+				}
+			}
+
+		return 0;
+		}
+	return -1;
+	}
+
+void Project::getAttributes(vector<Attribute> &attrs)const{
+	this->iterator->getAttributes(attrs);
+}
+
+
+
+
+
+
+
+
+
+
+
+
 RC compareAttributes(void * compAttrValue, void * leftAttribute, Attribute conditionAttribute, CompOp compOp){
 		switch (compOp) {
 			case EQ_OP: {

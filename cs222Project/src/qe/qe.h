@@ -211,14 +211,17 @@ public:
 
 class Project : public Iterator {
     // Projection operator
+	private:
+	vector <Attribute> projectedAttr ;
     public:
+		Iterator* iterator;
         Project(Iterator *input,                    // Iterator of input R
-              const vector<string> &attrNames){};   // vector containing attribute names
+              const vector<string> &attrNames);   // vector containing attribute names
         ~Project(){};
 
-        RC getNextTuple(void *data) {return QE_EOF;};
+        RC getNextTuple(void *data);
         // For attribute in vector<Attribute>, name it as rel.attr
-        void getAttributes(vector<Attribute> &attrs) const{};
+        void getAttributes(vector<Attribute> &attrs) const;
 };
 
 class BNLJoin : public Iterator {
