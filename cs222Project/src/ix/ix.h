@@ -22,8 +22,17 @@ typedef enum {
 
 class IndexManager {
 
+private:
+	IXFileHandle* ixFileHandle;
+
 public:
 	static IndexManager* instance();
+
+	IXFileHandle* getIxFileHandle();
+
+	static string getIndexFileName(const string& tableName,const string &attributeName){
+		return tableName + '-' + attributeName;
+	}
 
 	// Create an index file.
 	RC createFile(const string &fileName);

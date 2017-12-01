@@ -17,7 +17,6 @@ RC Filter::getNextTuple(void* data) {
 		if(compareCondition(data) == 0) {
 			return 0;
 		}
-
 	}
 	return -1;
 

@@ -539,7 +539,7 @@ PagedFile::PagedFile(string fileName, FileHandle *fileHandle) {
 PagedFile::~PagedFile() {
 	this->serializeToOffset(this->name, 0, PAGE_SIZE);
 	if(this->missCounter+this->hitCounter != 0)
-		cout << "Debug stats: " << this->hitCounter << " - " << this->missCounter << " Ratio: " << this->hitCounter*100/ (this->missCounter+this->hitCounter) << "%" << endl;
+//		cout << "Debug stats: " << this->hitCounter << " - " << this->missCounter << " Ratio: " << this->hitCounter*100/ (this->missCounter+this->hitCounter) << "%" << endl;
 
 	for(int i=0; i< PAGES_CACHE_SIZE; i++) {
 		Page* page = this->pagesCache->get(i);
