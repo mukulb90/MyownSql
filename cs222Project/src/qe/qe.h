@@ -18,6 +18,8 @@ typedef enum{ MIN=0, MAX, COUNT, SUM, AVG } AggregateOp;
 //    For INT and REAL: use 4 bytes
 //    For VARCHAR: use 4 bytes for the length followed by the characters
 
+
+
 struct Value {
     AttrType type;          // type of value
     void     *data;         // value
@@ -191,16 +193,19 @@ class IndexScan : public Iterator
 
 
 class Filter : public Iterator {
-    // Filter operator
-    public:
-        Filter(Iterator *input,               // Iterator of input R
-               const Condition &condition     // Selection condition
-        );
-        ~Filter(){};
+	// Filter operator
+public:
+	Condition condition;
+	Iterator* iterator;
+	Filter(Iterator *input,               // Iterator of input R
+			const Condition &condition     // Selection condition
+			);
+	~Filter(){};
 
-        RC getNextTuple(void *data) {return QE_EOF;};
-        // For attribute in vector<Attribute>, name it as rel.attr
-        void getAttributes(vector<Attribute> &attrs) const{};
+	RC getNextTuple(void *data);
+	// For attribute in vector<Attribute>, name it as rel.attr
+	void getAttributes(vector<Attribute> &attrs) const;
+	RC compareCondition( void *data);
 };
 
 
@@ -288,5 +293,6 @@ class Aggregate : public Iterator {
         // output attrname = "MAX(rel.attr)"
         void getAttributes(vector<Attribute> &attrs) const{};
 };
-
+float compareCondition(const void *data,Condition &condition);
+RC compareAttributes(void * compAttrValue, void * data, Attribute conditionAttribute, CompOp compOp);
 #endif
