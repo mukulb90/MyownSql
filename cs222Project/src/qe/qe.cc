@@ -10,7 +10,6 @@ Filter::Filter(Iterator *input, const Condition & condition ){
 //	this->iterator = 0;
 //}
 
-static int count_var = 0;
 
 RC Filter::getNextTuple(void* data) {
 	while(iterator->getNextTuple(data) != EOF) {
@@ -261,6 +260,7 @@ RC Aggregate::sumAndCountAggregrate(void *sumData, void *counter, bool &areAllAt
 	while(this->iterator->getNextTuple(nextTuple)!=EOF){
 		for(int index = 0; index < attribute.size(); index++){
 			if(attribute.at(index).name == this->aggAttr.name ){
+				 count ++;
 					InternalRecord *rf = InternalRecord::parse(attribute,nextTuple,0,false);
 						void * attributeData = calloc(1,PAGE_SIZE);
 						 rf->getAttributeByIndex(index,attribute,attributeData,isNull);
@@ -268,11 +268,9 @@ RC Aggregate::sumAndCountAggregrate(void *sumData, void *counter, bool &areAllAt
 							 areAllAttributesNull = false;
 							 if(this->aggAttr.type == TypeInt){
 								 sum += *((int*)attributeData);
-								 count ++;
 							 }
 							 else{
 								 sum += *((float*)attributeData);
-								 count++;
 							 }
 						 }
 						 free(attributeData);
@@ -291,12 +289,6 @@ void Aggregate::getAttributes(vector<Attribute> &attrs) const{
 	this->iterator->getAttributes(attrs);
 
 }
-
-
-
-
-
-
 
 RC compareAttributes(void * compAttrValue, void * leftAttribute, Attribute conditionAttribute, CompOp compOp){
 		switch (compOp) {
