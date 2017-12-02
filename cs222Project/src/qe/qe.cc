@@ -16,7 +16,6 @@ RC Filter::getNextTuple(void* data) {
 		if(compareCondition(data) == 0) {
 			return 0;
 		}
-
 	}
 	return -1;
 
@@ -104,10 +103,7 @@ RC Project::getNextTuple(void* data){
 							memcpy(cursor,projectedData, sizeof(int));
 							cursor = cursor+sizeof(int);
 							freeIfNotNull(projectedData);
-
 						}
-
-
 					}
 				}
 			}
@@ -118,9 +114,8 @@ RC Project::getNextTuple(void* data){
 	}
 
 void Project::getAttributes(vector<Attribute> &attrs)const{
-	this->iterator->getAttributes(attrs);
+	attrs = projectedAttr;
 }
-
 
 
 Aggregate::Aggregate(Iterator *input,  Attribute aggAttr, AggregateOp op){
@@ -335,6 +330,328 @@ RC compareAttributes(void * compAttrValue, void * leftAttribute, Attribute condi
 
 		}
 		return -1;
+}
 
+INLJoin::INLJoin(Iterator *leftIn,           // Iterator of input R
+		IndexScan *rightIn,          // IndexScan Iterator of input S
+		const Condition &condition   // Join condition
+		) {
+	this->leftIn = leftIn;
+	this->rightIn = rightIn;
+	this->condition = condition;
+	this->leftRecord = malloc(PAGE_SIZE);
+	this->rightRecord = malloc(PAGE_SIZE);
+	this->conditionAttribute = this->rightIn->iter->attr;
+	this->leftIn->getNextTuple(this->leftRecord);
+};
+
+INLJoin::~INLJoin() {
+	freeIfNotNull(this->leftRecord);
+	freeIfNotNull(this->rightRecord);
+};
+
+RC INLJoin::getNextTuple(void *data) {
+	while(true){
+		int rc;
+		while (this->rightIn->getNextTuple(this->rightRecord) != -1) {
+			vector<Attribute> leftRecordDescriptor;
+			vector<Attribute> rightRecordDescriptor;
+			this->leftIn->getAttributes(leftRecordDescriptor);
+			this->rightIn->getAttributes(rightRecordDescriptor);
+			InternalRecord* lir = InternalRecord::parse(leftRecordDescriptor,
+					this->leftRecord, 0, false);
+
+			InternalRecord* rir = InternalRecord::parse(rightRecordDescriptor,
+					this->rightRecord, 0, false);
+
+			void* leftKey = malloc(this->conditionAttribute.length + 4);
+			void* rightKey = malloc(this->conditionAttribute.length + 4);
+			bool isLeftKeyNull = false;
+			bool isRightKeyNull = false;
+			rc = lir->getAttributeValueByName(this->condition.lhsAttr,
+					leftRecordDescriptor, leftKey, isLeftKeyNull);
+			if (rc == -1) {
+				return -1;
+			}
+			rc = rir->getAttributeValueByName(this->condition.rhsAttr,
+					rightRecordDescriptor, rightKey, isRightKeyNull);
+			if (rc == -1) {
+				return -1;
+			}
+
+//
+//			RelationManager::instance()->printTuple(leftRecordDescriptor,
+//					this->leftRecord);
+//
+//			RelationManager::instance()->printTuple(rightRecordDescriptor,
+//									this->rightRecord);
+
+			if (compareAttributes(rightKey, leftKey, this->conditionAttribute,
+					this->condition.op) == 0) {
+
+				vector<Attribute> newRecordDescriptor;
+				this->getAttributes(newRecordDescriptor);
+
+				vector<void*> dataArray;
+				vector<bool> isNullArray;
+
+				for (int i = 0; i < leftRecordDescriptor.size(); i++) {
+					Attribute attr = leftRecordDescriptor[i];
+					void* data = malloc(attr.length + 4);
+					bool isNull;
+					lir->getAttributeByIndex(i, leftRecordDescriptor, data, isNull);
+					dataArray.push_back(data);
+					isNullArray.push_back(isNull);
+				}
+
+
+				for (int i = 0; i < rightRecordDescriptor.size(); i++) {
+					Attribute attr = rightRecordDescriptor[i];
+					void* data = malloc(attr.length + 4);
+					bool isNull;
+					rir->getAttributeByIndex(i, rightRecordDescriptor, data,
+							isNull);
+					dataArray.push_back(data);
+					isNullArray.push_back(isNull);
+				}
+
+				mergeAttributesData(newRecordDescriptor, isNullArray, dataArray,
+						data);
+				return 0;
+			}
+		}
+		rc = this->leftIn->getNextTuple(this->leftRecord);
+		if(rc == -1) {
+	//		left table exhausted
+			return -1;
+		}
+		this->rightIn->setIterator(NULL, NULL, true, true);
+	}
+};
+
+void INLJoin::getAttributes(vector<Attribute> &attrs) const {
+    attrs.clear();
+
+    vector<Attribute> temp;
+	this->leftIn->getAttributes(temp);
+    for(int i=0; i< temp.size(); i++) {
+        attrs.push_back(temp[i]);
+    }
+
+    temp.clear();
+	this->rightIn->getAttributes(temp);
+    for(int i=0; i< temp.size(); i++) {
+        attrs.push_back(temp[i]);
+    }
+};
+
+BNLJoin::BNLJoin(Iterator *leftIn,            // Iterator of input R
+        TableScan *rightIn,           // TableScan Iterator of input S
+        const Condition &condition,   // Join condition
+        const unsigned numPages       // # of pages that can be loaded into memory,
+		                                 //   i.e., memory block size (decided by the optimizer)
+ ){
+	this->blockSize = numPages*PAGE_SIZE;
+	this->condition = condition;
+	this->leftIterator = leftIn;
+	this->rightIterator = rightIn;
+	this->currentBlock = new Block(this->leftIterator, this->blockSize, this->condition.lhsAttr);
+	this->rightRecord = malloc(PAGE_SIZE);
+	this->leftRecord = malloc(PAGE_SIZE);
+}
+
+BNLJoin::~BNLJoin(){
+
+}
+
+void BNLJoin::getAttributes(vector<Attribute> &attrs) const{
+	attrs.clear();
+	vector<Attribute> temp;
+	this->leftIterator->getAttributes(temp);
+	for(int i=0; i< temp.size(); i++) {
+		attrs.push_back(temp[i]);
+	}
+
+	temp.clear();
+	this->rightIterator->getAttributes(temp);
+	for(int i=0; i< temp.size(); i++) {
+		attrs.push_back(temp[i]);
+	}
+}
+
+RC BNLJoin::getNextTuple(void *data) {
+	while(true){
+		int rc;
+		while (this->rightIterator->getNextTuple(this->rightRecord) != -1) {
+			vector<Attribute> leftRecordDescriptor;
+			vector<Attribute> rightRecordDescriptor;
+			this->leftIterator->getAttributes(leftRecordDescriptor);
+			this->rightIterator->getAttributes(rightRecordDescriptor);
+
+			InternalRecord* rir = InternalRecord::parse(rightRecordDescriptor,
+					this->rightRecord, 0, false);
+
+			void* rightKey = malloc(PAGE_SIZE);
+			bool isRightKeyNull = false;
+
+			rc = rir->getAttributeValueByName(this->condition.rhsAttr, rightRecordDescriptor, rightKey, isRightKeyNull);
+			if (rc == -1) {
+				return -1;
+			}
+
+			rc = this->currentBlock->getByKey(rightKey, this->leftRecord);
+			if(rc == -1) {
+				//				not found
+				continue;
+			}
+//			right key found in left buck =>  hence merge them;
+
+			vector<Attribute> newRecordDescriptor;
+			this->getAttributes(newRecordDescriptor);
+
+			vector<void*> dataArray;
+			vector<bool> isNullArray;
+
+			for (int i = 0; i < leftRecordDescriptor.size(); i++) {
+				Attribute attr = leftRecordDescriptor[i];
+				void* data = malloc(attr.length + 4);
+				bool isNull;
+				InternalRecord* lir = InternalRecord::parse(leftRecordDescriptor,
+						this->leftRecord, 0, false);
+				lir->getAttributeByIndex(i, leftRecordDescriptor, data, isNull);
+				dataArray.push_back(data);
+				isNullArray.push_back(isNull);
+			}
+
+
+			for (int i = 0; i < rightRecordDescriptor.size(); i++) {
+				Attribute attr = rightRecordDescriptor[i];
+				void* data = malloc(attr.length + 4);
+				bool isNull;
+				rir->getAttributeByIndex(i, rightRecordDescriptor, data,
+						isNull);
+				dataArray.push_back(data);
+				isNullArray.push_back(isNull);
+			}
+
+			mergeAttributesData(newRecordDescriptor, isNullArray, dataArray,
+					data);
+			return 0;
+
+		}
+		rc = this->currentBlock->getNextBlock();
+		if(rc == -1) {
+		// left table exhausted
+			return -1;
+		}
+		this->rightIterator->setIterator();
+	}
+}
+
+
+Block::Block(Iterator *iterator, int sizeInBytes, string &keyAttributeName) {
+	vector<Attribute> recordDescriptor;
+	this->iterator = iterator;
+	this->iterator->getAttributes(recordDescriptor);
+	this->blockSize = sizeInBytes;
+	for(int i=0; i<recordDescriptor.size(); i++) {
+		if(recordDescriptor[i].name == keyAttributeName){
+			this->keyAttribute = recordDescriptor[i];
+			break;
+		}
+	}
+	this->getNextBlock();
+}
+
+Block::~Block() {
+
+}
+
+void Block::setByKey(void* key, void* data) {
+	if (this->keyAttribute.type == TypeInt) {
+		int keyValue = *(int*) key;
+		this->intData[keyValue] = data;
+	} else if (this->keyAttribute.type == TypeReal) {
+		float keyValue = *(float*) key;
+		this->floatData[keyValue] = data;
+	} else {
+		VarcharParser* vp = new VarcharParser(key);
+		string keyValue;
+		vp->unParse(keyValue);
+		vp->data = NULL;
+		delete vp;
+		this->stringData[keyValue] = data;
+	}
+}
+
+RC Block::getByKey(void* key, void* data) {
+	vector<Attribute> recordDescriptor;
+	this->iterator->getAttributes(recordDescriptor);
+	int maxSizePerRecord = InternalRecord::getMaxBytes(recordDescriptor);
+
+	if(this->keyAttribute.type == TypeInt) {
+		int keyValue = *(int*)key;
+		if(this->intData.find(keyValue) != this->intData.end()){
+			memcpy(data, this->intData[keyValue], maxSizePerRecord);
+			return 0;
+		} else {
+			return -1;
+		}
+	} else if(this->keyAttribute.type == TypeReal) {
+		float keyValue = *(float*)key;
+		if(this->floatData.find(keyValue) != this->floatData.end()){
+			memcpy(data, this->floatData[keyValue], maxSizePerRecord);
+			return 0;
+		} else {
+			return -1;
+		}
+
+	} else {
+		VarcharParser* vp = new VarcharParser(key);
+		string keyValue;
+		vp->unParse(keyValue);
+		vp->data = NULL;
+		delete vp;
+
+		if(this->stringData.find(keyValue) != this->stringData.end()){
+			memcpy(data, this->stringData[keyValue], maxSizePerRecord);
+			return 0;
+		} else {
+			return -1;
+		}
+	}
+	return -1;
+}
+
+RC Block::getNextBlock() {
+//	emptry current block;
+//	#TODO garbage collector
+	this->clear();
+
+	vector<Attribute> recordDescriptor;
+	this->iterator->getAttributes(recordDescriptor);
+	int maxSizePerRecord = InternalRecord::getMaxBytes(recordDescriptor);
+	int maxSizePerKey = this->keyAttribute.length+sizeof(int);
+	void* data = malloc(maxSizePerRecord);
+	int numberOfRecordsThatCanFit = floor(this->blockSize/(maxSizePerRecord+maxSizePerKey));
+	int count = 1;
+	while(count < numberOfRecordsThatCanFit) {
+		if(this->iterator->getNextTuple(data) == -1){
+			if(count == 1) {
+				return -1;
+			} else {
+				return 0;
+			}
+		}
+		InternalRecord* ir = InternalRecord::parse(recordDescriptor, data, 0, false);
+		void* key = malloc(maxSizePerKey);
+		bool isNull;
+		ir->getAttributeValueByName(this->keyAttribute.name, recordDescriptor, key, isNull);
+		this->setByKey(key, data);
+		data = malloc(maxSizePerRecord);
+		key = malloc(maxSizePerKey);
+		count++;
+	}
+	return 0;
 }
 

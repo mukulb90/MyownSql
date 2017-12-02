@@ -50,3 +50,25 @@ make
 ./rmtest_extra_1
 
 ./rmtest_extra_2
+
+./rmtest_p0
+
+./rmtest_p1
+
+./rmtest_p2
+
+./rmtest_p3
+
+./rmtest_p4
+
+./rmtest_p5
+
+./rmtest_p6
+
+./rmtest_p7
+
+./rmtest_p8
+
+./rmtest_p9
+
+

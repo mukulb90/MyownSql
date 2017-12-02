@@ -139,4 +139,8 @@ private:
   static RecordBasedFileManager *_rbf_manager;
 };
 
+void mergeAttributesData(vector<Attribute> newRecordDescriptorForProjections,
+	vector<bool> isNullArray, vector<void*> dataArray, void* data);
+
 #endif
+

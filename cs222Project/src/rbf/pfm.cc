@@ -539,7 +539,7 @@ PagedFile::PagedFile(string fileName, FileHandle *fileHandle) {
 PagedFile::~PagedFile() {
 	this->serializeToOffset(this->name, 0, PAGE_SIZE);
 	if(this->missCounter+this->hitCounter != 0)
-		cout << "Debug stats: " << this->hitCounter << " - " << this->missCounter << " Ratio: " << this->hitCounter*100/ (this->missCounter+this->hitCounter) << "%" << endl;
+//		cout << "Debug stats: " << this->hitCounter << " - " << this->missCounter << " Ratio: " << this->hitCounter*100/ (this->missCounter+this->hitCounter) << "%" << endl;
 
 	for(int i=0; i< PAGES_CACHE_SIZE; i++) {
 		Page* page = this->pagesCache->get(i);
@@ -822,6 +822,17 @@ RC InternalRecord::getAttributeByIndex(const int &index, const vector<Attribute>
 	return 0;
 }
 
+RC InternalRecord::getAttributeValueByName(const string attributeName, const vector<Attribute>& recordDescriptor, void* attribute, bool &isNull) {
+	for(int i=0; i< recordDescriptor.size(); i++) {
+		Attribute attr = recordDescriptor[i];
+		if(attr.name == attributeName) {
+			this->getAttributeByIndex(i, recordDescriptor, attribute, isNull);
+			return 0;
+		}
+	}
+	return -1;
+}
+
 RC InternalRecord::getVersionId(int &versionId) {
 	memcpy(&versionId, this->data, sizeof(int));
 	return 0;
@@ -1022,4 +1033,19 @@ int Cache<Value>::set(int k, Value &v) {
 	int offset = this->hashCode(k);
 	this->internal_cache[offset] = v;
 	return 0;
+}
+
+
+int InternalRecord::getMaxBytes(const vector<Attribute> &recordDescriptor){
+		int size = 0;
+		Attribute attr;
+		for(int i =0; i<recordDescriptor.size(); i++) {
+			attr = recordDescriptor[i];
+			if(attr.type == TypeReal || attr.type == TypeInt) {
+				size += sizeof(int);
+			} else {
+				size += sizeof(int) + attr.length;
+			}
+		}
+		return size;
 }
