@@ -104,10 +104,12 @@ public :
 	InternalRecord();
 	~InternalRecord();
 	static int getInternalRecordBytes(const vector<Attribute> &recordDescriptor, const void* data);
+	static int getMaxBytes(const vector<Attribute> &recordDescriptor);
 	static InternalRecord* parse(const vector<Attribute> &recordDescriptor,const void* data, const int &versionId, const int &isPointedByForwarder);
 	RC unParse(const vector<Attribute> &recordDescriptor, void* data, int &versionId, int &isPointedByForwarder);
 	RC getBytes();
 	RC getAttributeByIndex(const int &index, const vector<Attribute> &recordDescriptor, void* attribute, bool &isNull);
+	RC getAttributeValueByName(const string attributeName, const vector<Attribute>& recordDescriptor, void* attribute, bool &isNull);
 	RC getVersionId(int &versionId);
 	bool isPointedByForwarder();
 };

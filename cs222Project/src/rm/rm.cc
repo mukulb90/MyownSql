@@ -940,7 +940,6 @@ RC RelationManager::createIndex(const string &tableName, const string &attribute
 	RID rid;
 	void* data = malloc(PAGE_SIZE);
 	ColumnsCatalogRecord * record;
-	cout << attributeName << endl;
 	while(iter.getNextTuple(rid, data) != -1){
 		record = new ColumnsCatalogRecord(data);
 		Attribute attr;
@@ -985,12 +984,9 @@ RC RelationManager::createIndex(const string &tableName, const string &attribute
 			this->scan(tableName, attributeName, NO_OP, NULL, indexKey, iter2);
 
 			while(iter2.getNextTuple(rid, data) != -1) {
-				cout << "updating index" << endl;
-				this->printTuple(indexAttr, data);
 				im->insertEntry(ixFileHandle, attr, (char*)data+1, rid);
 			}
             iter2.close();
-            im->printBtree(ixFileHandle, attr);
             im->closeFile(ixFileHandle);
 			freeIfNotNull(data);
 			this->invalidateCache(tableName);

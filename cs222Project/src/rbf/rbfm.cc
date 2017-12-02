@@ -327,6 +327,9 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 				delete page;
 			} else {
 				Page* page = fileHandle.file->getPageByIndex(this->pageNumber);
+				if(page == 0){
+					return -1;
+				}
 				int numberOfSlots = page->getNumberOfSlots();
 				if(this->slotNumber+1 < numberOfSlots) {
 					this->slotNumber++;

@@ -9,6 +9,8 @@
 
 #define QE_EOF (-1)  // end of the index scan
 
+RC compareAttributes(void * compAttrValue, void * data, Attribute conditionAttribute, CompOp compOp);
+
 using namespace std;
 
 typedef enum{ MIN=0, MAX, COUNT, SUM, AVG } AggregateOp;
@@ -224,35 +226,76 @@ class Project : public Iterator {
         void getAttributes(vector<Attribute> &attrs) const;
 };
 
+class Block{
+
+public:
+	Iterator *iterator;
+	int blockSize;
+	Attribute keyAttribute;
+	unordered_map<int, void*> intData;
+	unordered_map<float, void*> floatData;
+	unordered_map<string, void*> stringData;
+
+	Block(Iterator *iterator, int sizeInBytes, string &keyattributeName);
+	~Block();
+
+	RC getByKey(void* key, void* data);
+	void setByKey(void* key, void* data);
+	RC getNextBlock();
+	void clear(){
+		this->intData.clear();
+		this->floatData.clear();
+		this->stringData.clear();
+	}
+};
+
 class BNLJoin : public Iterator {
     // Block nested-loop join operator
+
+	Iterator* leftIterator;
+	TableScan* rightIterator;
+	Condition condition;
+	int blockSize;
+	Block* currentBlock;
+	void* rightRecord;
+	void* leftRecord;
+
     public:
         BNLJoin(Iterator *leftIn,            // Iterator of input R
                TableScan *rightIn,           // TableScan Iterator of input S
                const Condition &condition,   // Join condition
                const unsigned numPages       // # of pages that can be loaded into memory,
 			                                 //   i.e., memory block size (decided by the optimizer)
-        ){};
-        ~BNLJoin(){};
+        );
 
-        RC getNextTuple(void *data){return QE_EOF;};
-        // For attribute in vector<Attribute>, name it as rel.attr
-        void getAttributes(vector<Attribute> &attrs) const{};
+        ~BNLJoin();
+
+        RC getNextTuple(void *data);
+
+        void getAttributes(vector<Attribute> &attrs) const;
 };
 
 
 class INLJoin : public Iterator {
     // Index nested-loop join operator
     public:
+	Iterator *leftIn;
+	IndexScan *rightIn;
+	Condition condition;
+	Attribute conditionAttribute;
+	void* leftRecord;
+	void* rightRecord;
+
         INLJoin(Iterator *leftIn,           // Iterator of input R
                IndexScan *rightIn,          // IndexScan Iterator of input S
                const Condition &condition   // Join condition
-        ){};
-        ~INLJoin(){};
+        );
 
-        RC getNextTuple(void *data){return QE_EOF;};
-        // For attribute in vector<Attribute>, name it as rel.attr
-        void getAttributes(vector<Attribute> &attrs) const{};
+        ~INLJoin();
+
+        RC getNextTuple(void *data);
+
+        void getAttributes(vector<Attribute> &attrs) const;
 };
 
 // Optional for everyone. 10 extra-credit points
@@ -296,6 +339,5 @@ class Aggregate : public Iterator {
         // output attrname = "MAX(rel.attr)"
         void getAttributes(vector<Attribute> &attrs) const{};
 };
-float compareCondition(const void *data,Condition &condition);
-RC compareAttributes(void * compAttrValue, void * data, Attribute conditionAttribute, CompOp compOp);
+
 #endif
