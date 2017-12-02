@@ -273,13 +273,19 @@ class GHJoin : public Iterator {
 
 class Aggregate : public Iterator {
     // Aggregation operator
+	private:
+	Iterator *iterator;
+	Attribute aggAttr;
+	AggregateOp oper;
+	bool reachedEndOfFile;
+	Iterator *reset;
     public:
         // Mandatory
         // Basic aggregation
         Aggregate(Iterator *input,          // Iterator of input R
                   Attribute aggAttr,        // The attribute over which we are computing an aggregate
                   AggregateOp op            // Aggregate operation
-        ){};
+        );
 
         // Optional for everyone: 5 extra-credit points
         // Group-based hash aggregation
@@ -290,11 +296,12 @@ class Aggregate : public Iterator {
         ){};
         ~Aggregate(){};
 
-        RC getNextTuple(void *data){return QE_EOF;};
+        RC getNextTuple(void *data);
         // Please name the output attribute as aggregateOp(aggAttr)
         // E.g. Relation=rel, attribute=attr, aggregateOp=MAX
         // output attrname = "MAX(rel.attr)"
-        void getAttributes(vector<Attribute> &attrs) const{};
+        void getAttributes(vector<Attribute> &attrs) const;
+        RC sumAndCountAggregrate(void *sumData,void *countData, bool &areAllAttributesNull);
 };
 float compareCondition(const void *data,Condition &condition);
 RC compareAttributes(void * compAttrValue, void * data, Attribute conditionAttribute, CompOp compOp);

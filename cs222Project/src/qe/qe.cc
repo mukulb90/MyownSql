@@ -124,8 +124,173 @@ void Project::getAttributes(vector<Attribute> &attrs)const{
 
 
 
+Aggregate::Aggregate(Iterator *input,  Attribute aggAttr, AggregateOp op){
+	this->reset = input;
+	this->iterator = input;
+	this->aggAttr = aggAttr;
+	this->oper = op;
+	this->reachedEndOfFile = false;
+};
+
+RC Aggregate::getNextTuple(void *data){
+
+	void *nextTuple = calloc(1,PAGE_SIZE);
+	vector <Attribute> attribute;
+	this->getAttributes(attribute);
+	bool areAllAtrributesNull = true;
+	bool nullbit = false;
+	float counter = 0;
+	float sum = 0;
+	float finalResult ;
+
+	if(this->reachedEndOfFile){
+		 return -1;
+	}
+	 switch (this->oper) {
+	 	 case MIN:
+	 	 case MAX :
+	 	 { // #TODO - initialization as values can be negative
+	 		bool isNull;
+	 		void *maxData = calloc(1,PAGE_SIZE);
+
+	 		bool firstCount = false;
+	 			while(this->iterator->getNextTuple(nextTuple)!=EOF){
+	 				for(int index= 0; index<attribute.size();index++){
+	 					if(attribute.at(index).name == this->aggAttr.name ){
+	 							InternalRecord *rf = InternalRecord::parse(attribute,nextTuple,0,false);
+	 							void* attributeData =  calloc (1,PAGE_SIZE);
+	 							rf->getAttributeByIndex(index,attribute,attributeData,isNull);
+	 								if(!isNull){
+	 									if(!firstCount){
+	 										memcpy(maxData,attributeData,sizeof(int));
+	 										firstCount = true;
+	 									}
+	 										float comparisonResult = compare(attributeData,maxData, attribute.at(index),false, false);
+	 										if(comparisonResult < 0 && this->oper == MAX){
+	 											memcpy(maxData,attributeData,sizeof(int));
+	 											freeIfNotNull(attributeData);
+	 											areAllAtrributesNull = false;
+
+	 										}
+	 										else if (comparisonResult > 0 && this->oper == MIN){
+	 											memcpy(maxData,attributeData,sizeof(int));
+	 											freeIfNotNull(attributeData);
+	 											areAllAtrributesNull = false;
+	 										}
+	 								}
+	 							}
+	 					}
+	 			}
+	 			char * cursorAggregate = (char*)data;
+	 			if(areAllAtrributesNull ){
+	 				nullbit = true;
+	 			}
+	 			memcpy(cursorAggregate, &nullbit, sizeof(bool));
+	 			cursorAggregate = cursorAggregate + 1;
+	 			if(this->aggAttr.type == TypeInt){
+	 				finalResult = (float)*(int*)maxData;
+	 			}
+	 			memcpy(cursorAggregate, &finalResult,sizeof(int));
+	 			this->reachedEndOfFile = true;
+	 			free(maxData);
+	 	 	 }
+	 			break;
+
+	 	 case COUNT :
+	 	 {
+
+	 		int RC = this->sumAndCountAggregrate(&sum,&counter,areAllAtrributesNull);
+	 		char * cursorAggregate = (char*) data;
+	 		if (areAllAtrributesNull) {
+	 			 nullbit = true;
+	 		}
+	 		memcpy(cursorAggregate, &nullbit, sizeof(bool));
+	 		cursorAggregate = cursorAggregate + 1;
+	 		finalResult =  counter;
+	 		memcpy(cursorAggregate, &finalResult, sizeof(int));
+ 			this->reachedEndOfFile = true;
+
+	 	 }
+	 		break;
+
+	 	 case AVG :
+	 	 {
+	 		this->sumAndCountAggregrate(&sum, &counter, areAllAtrributesNull);
+	 		char * cursorAggregate = (char*) data;
+	 		if (areAllAtrributesNull) {
+	 			 	nullbit = true;
+	 		}
+	 		memcpy(cursorAggregate, &nullbit, sizeof(bool));
+	 		cursorAggregate = cursorAggregate + 1;
+	 		finalResult =  sum/counter;
+	 		memcpy(cursorAggregate, &finalResult, sizeof(int));
+	 		this->reachedEndOfFile = true;
+
+	 	 }
+	 		 break;
+
+	 	 case SUM :
+	 	{
+	 		this->sumAndCountAggregrate(&sum, &counter, areAllAtrributesNull);
+	 		char * cursorAggregate = (char*) data;
+	 		if (areAllAtrributesNull) {
+	 			nullbit = true;
+	 		}
+	 		memcpy(cursorAggregate, &nullbit, sizeof(bool));
+	 		cursorAggregate = cursorAggregate + 1;
+	 		finalResult = sum;
+	 		memcpy(cursorAggregate, &finalResult, sizeof(int));
+	 		this->reachedEndOfFile = true;
+	 	 }
+	 	 break;
+	 }
+	 free(nextTuple);
+	 return 0;
+
+}
 
 
+RC Aggregate::sumAndCountAggregrate(void *sumData, void *counter, bool &areAllAttributesNullData){
+	void *nextTuple = calloc(1,PAGE_SIZE);
+	vector <Attribute> attribute;
+	this->getAttributes(attribute);
+	float sum = 0;
+	float count = 0;
+	bool isNull;
+	bool areAllAttributesNull = true;
+	while(this->iterator->getNextTuple(nextTuple)!=EOF){
+		for(int index = 0; index < attribute.size(); index++){
+			if(attribute.at(index).name == this->aggAttr.name ){
+					InternalRecord *rf = InternalRecord::parse(attribute,nextTuple,0,false);
+						void * attributeData = calloc(1,PAGE_SIZE);
+						 rf->getAttributeByIndex(index,attribute,attributeData,isNull);
+						 if(!isNull){
+							 areAllAttributesNull = false;
+							 if(this->aggAttr.type == TypeInt){
+								 sum += *((int*)attributeData);
+								 count ++;
+							 }
+							 else{
+								 sum += *((float*)attributeData);
+								 count++;
+							 }
+						 }
+						 free(attributeData);
+		}
+	}
+
+	}
+	memcpy(sumData,&sum,sizeof(int));
+	memcpy(counter,&count,sizeof(int));
+	areAllAttributesNullData = areAllAttributesNull;
+	free(nextTuple);
+	return 0;
+}
+
+void Aggregate::getAttributes(vector<Attribute> &attrs) const{
+	this->iterator->getAttributes(attrs);
+
+}
 
 
 
