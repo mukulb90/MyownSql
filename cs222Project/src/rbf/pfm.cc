@@ -1038,6 +1038,7 @@ int Cache<Value>::set(int k, Value &v) {
 
 int InternalRecord::getMaxBytes(const vector<Attribute> &recordDescriptor){
 		int size = 0;
+		size += getNumberOfNullBytes(recordDescriptor);
 		Attribute attr;
 		for(int i =0; i<recordDescriptor.size(); i++) {
 			attr = recordDescriptor[i];

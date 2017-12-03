@@ -1,5 +1,6 @@
 
 #include "qe.h"
+#include "time.h"
 
 Filter::Filter(Iterator *input, const Condition & condition ){
 	this->iterator = input;
@@ -504,7 +505,7 @@ BNLJoin::BNLJoin(Iterator *leftIn,            // Iterator of input R
 	this->condition = condition;
 	this->leftIterator = leftIn;
 	this->rightIterator = rightIn;
-	this->currentBlock = new Block(this->leftIterator, this->blockSize, this->condition.lhsAttr);
+	this->currentBlock = new FixedSizeBlock(this->leftIterator, this->blockSize, this->condition.lhsAttr);
 	this->rightRecord = malloc(PAGE_SIZE);
 	this->leftRecord = malloc(PAGE_SIZE);
 }
@@ -598,18 +599,17 @@ RC BNLJoin::getNextTuple(void *data) {
 }
 
 
-Block::Block(Iterator *iterator, int sizeInBytes, string &keyAttributeName) {
+Block::Block(Iterator *iterator, string &keyAttributeName) {
 	vector<Attribute> recordDescriptor;
 	this->iterator = iterator;
+	this->count = 0;
 	this->iterator->getAttributes(recordDescriptor);
-	this->blockSize = sizeInBytes;
 	for(int i=0; i<recordDescriptor.size(); i++) {
 		if(recordDescriptor[i].name == keyAttributeName){
 			this->keyAttribute = recordDescriptor[i];
 			break;
 		}
 	}
-	this->getNextBlock();
 }
 
 Block::~Block() {
@@ -682,9 +682,8 @@ RC Block::getNextBlock() {
 	int maxSizePerRecord = InternalRecord::getMaxBytes(recordDescriptor);
 	int maxSizePerKey = this->keyAttribute.length+sizeof(int);
 	void* data = malloc(maxSizePerRecord);
-	int numberOfRecordsThatCanFit = floor(this->blockSize/(maxSizePerRecord+maxSizePerKey));
-	int count = 1;
-	while(count < numberOfRecordsThatCanFit) {
+	count = 1;
+	while(!this->shouldStopInserting()) {
 		if(this->iterator->getNextTuple(data) == -1){
 			if(count == 1) {
 				return -1;
@@ -699,8 +698,222 @@ RC Block::getNextBlock() {
 		this->setByKey(key, data);
 		data = malloc(maxSizePerRecord);
 		key = malloc(maxSizePerKey);
-		count++;
+		this->count++;
 	}
 	return 0;
 }
 
+GHJoin::GHJoin(Iterator* leftIn, Iterator* rightIn, const Condition& condition, unsigned int numPartions){
+	this->leftIn = leftIn;
+	this->rightIn = rightIn;
+	this->condition = condition;
+	this->numPartitions = numPartions;
+	time (&(this->joinTimeStamp));
+	vector<Attribute> leftAttributes;
+	vector<Attribute> rightAttributes;
+	this->leftIn->getAttributes(leftAttributes);
+	this->rightIn->getAttributes(rightAttributes);
+	this->leftRecord = malloc(PAGE_SIZE);
+	this->rightRecord = malloc(PAGE_SIZE);
+	this->createPartitions(this->condition.lhsAttr, this->leftIn, this->condition.lhsAttr, numPartitions);
+	this->createPartitions(this->condition.rhsAttr, this->rightIn, this->condition.rhsAttr, numPartitions);
+	this->partitionLeftIn = new PartitionIterator(this->condition.lhsAttr, numPartitions, leftAttributes);
+	this->partitionRightIn = new PartitionIterator(this->condition.rhsAttr, numPartitions, rightAttributes);
+	this->partitionLeftIn->isFullTableScanMode = false;
+	this->currentBlock = new PartitionBlock(this->partitionLeftIn, this->condition.lhsAttr);
+}
+
+int GHJoin::getPartitionIndexByKey(void* key, Attribute& attr){
+	if(attr.type == TypeInt) {
+		int keyValue = *((int*)key);
+		return keyValue%numPartitions;
+	} else if (attr.type == TypeReal) {
+		float keyValue = *((float*)key);
+		return ((int)keyValue)%numPartitions;
+	} else {
+		VarcharParser* vp = new VarcharParser(key);
+		string keyValue;
+		vp->unParse(keyValue);
+		vp->data = NULL;
+		delete vp;
+		int hash = 7;
+		for (int i = 0; i < keyValue.size(); i++) {
+		    hash = hash*31 + (int)keyValue[i];
+		}
+		return hash%numPartitions;
+	}
+}
+
+GHJoin::~GHJoin() {
+	RelationManager* rm = RelationManager::instance();
+	for(int i=0; i<this->numPartitions; i++){
+		string tableName = this->partitionLeftIn->relationName + '_' + to_string(i);
+		rm->deleteTable(tableName);
+		rm->deleteTable(this->partitionRightIn->relationName + '_' + to_string(i));
+	}
+}
+
+RC GHJoin::getNextTuple(void* data) {
+	while(true){
+		while(this->partitionRightIn->getNextTuple(this->rightRecord) != -1){
+				vector<Attribute> rightRecordDescriptor;
+				this->rightIn->getAttributes(rightRecordDescriptor);
+				InternalRecord* rir = InternalRecord::parse(rightRecordDescriptor, this->rightRecord, 0, false);
+				void* rightKey = malloc(rir->getMaxBytes(rightRecordDescriptor));
+				bool isNull;
+				rir->getAttributeValueByName(this->condition.rhsAttr, rightRecordDescriptor, rightKey, isNull);
+				if(this->currentBlock->getByKey(rightKey, this->leftRecord)!= -1){
+					// it is is hit
+					vector<Attribute> leftAttrs;
+					this->leftIn->getAttributes(leftAttrs);
+					InternalRecord * lir = InternalRecord::parse(leftAttrs, this->leftRecord, 0, false);
+
+					vector<Attribute> newRecordDescriptor;
+					this->getAttributes(newRecordDescriptor);
+
+					vector<void*> dataArray;
+					vector<bool> isNullArray;
+
+					for (int i = 0; i < leftAttrs.size(); i++) {
+						Attribute attr = leftAttrs[i];
+						void* data = malloc(attr.length + 4);
+						bool isNull;
+						InternalRecord* lir = InternalRecord::parse(leftAttrs,
+								this->leftRecord, 0, false);
+						lir->getAttributeByIndex(i, leftAttrs, data, isNull);
+						dataArray.push_back(data);
+						isNullArray.push_back(isNull);
+					}
+
+
+					for (int i = 0; i < rightRecordDescriptor.size(); i++) {
+						Attribute attr = rightRecordDescriptor[i];
+						void* data = malloc(attr.length + 4);
+						bool isNull;
+						rir->getAttributeByIndex(i, rightRecordDescriptor, data,
+								isNull);
+						dataArray.push_back(data);
+						isNullArray.push_back(isNull);
+					}
+
+//					RelationManager::instance()->printTuple(leftAttrs, this->leftRecord);
+//					RelationManager::instance()->printTuple(rightRecordDescriptor, this->rightRecord);
+					mergeAttributesData(newRecordDescriptor, isNullArray, dataArray, data);
+					return 0;
+				}
+			}
+            if(this->partitionLeftIn->next() != -1){
+				this->currentBlock->getNextBlock();
+				this->partitionRightIn->reset();
+				this->partitionRightIn->next();
+			} else {
+				return -1;
+			}
+	}
+}
+
+TableScan* PartitionIterator::getTableScanIteratorByIndex(int index) {
+	if(index < numPartitions) {
+		string name = this->relationName + "_" + to_string(index);
+		RelationManager* rm = RelationManager::instance();
+		return new TableScan(*rm, name);
+	}
+	return NULL;
+}
+
+PartitionIterator::PartitionIterator(string relationName, unsigned int numPartitions, vector<Attribute> &attrs){
+	this->relationName  = relationName;
+	this->numPartitions = numPartitions;
+	this->attrs = attrs;
+	isFullTableScanMode = true;
+	currentPartitionIndex = 0;
+	ts = getTableScanIteratorByIndex(currentPartitionIndex);
+}
+
+RC PartitionIterator::next(){
+	if(currentPartitionIndex < numPartitions-1){
+		currentPartitionIndex += 1;
+		this->ts = getTableScanIteratorByIndex(currentPartitionIndex);
+		return 0;
+	}
+	return -1;
+}
+
+RC PartitionIterator::getNextTuple(void* data) {
+	while(true){
+		if(ts == NULL) {
+			return -1;
+		}
+		if(ts->getNextTuple(data)!= -1){
+			return 0;
+		} else {
+			if(isFullTableScanMode){
+				currentPartitionIndex += 1;
+				ts = getTableScanIteratorByIndex(currentPartitionIndex);
+			} else {
+				return -1;
+			}
+		}
+	}
+}
+
+PartitionIterator::~PartitionIterator(){
+//	#TODO fix memory leaks
+}
+
+void PartitionIterator::getAttributes(vector<Attribute> &attrs) const {
+	attrs.clear();
+	for(int i=0; i< this->attrs.size(); i++) {
+		attrs.push_back(this->attrs[i]);
+	}
+}
+
+void GHJoin::createPartitions(string relationName, Iterator* iter, string &attributeName, unsigned int numPartitions) {
+	RelationManager* rm = RelationManager::instance();
+	vector<Attribute> recordDescriptor;
+	iter->getAttributes(recordDescriptor);
+	Attribute attr;
+	for(int i=0; i<recordDescriptor.size(); i++) {
+		attr =recordDescriptor[i];
+		if(attr.name == attributeName) {
+			break;
+		}
+	}
+
+	for(int i=0; i<numPartitions; i++) {
+		string partitionName = relationName + "_" + to_string(i);
+		rm->createTable(partitionName, recordDescriptor);
+	}
+	void* data = malloc(InternalRecord::getMaxBytes(recordDescriptor));
+	void* key = malloc(attr.length + sizeof(int));
+	RID rid;
+	int count = 0;
+	while(iter->getNextTuple(data)!= -1) {
+		InternalRecord* ir = InternalRecord::parse(recordDescriptor, data, 0, false);
+		bool isNull;
+		ir->getAttributeValueByName(attributeName, recordDescriptor, key, isNull);
+		int index = this->getPartitionIndexByKey(key, attr);
+		rm->insertTuple(relationName + "_" + to_string(index), data, rid);
+		count++;
+	}
+}
+
+
+void GHJoin::getAttributes(vector<Attribute> &attrs) const{
+	attrs.clear();
+	vector<Attribute> temp;
+	this->leftIn->getAttributes(temp);
+	for(int i=0; i< temp.size(); i++) {
+		attrs.push_back(temp[i]);
+	}
+
+	temp.clear();
+	this->rightIn->getAttributes(temp);
+	for(int i=0; i< temp.size(); i++) {
+		attrs.push_back(temp[i]);
+	}
+}
+
+void PartitionIterator::reset(){
+	this->currentPartitionIndex = 0;
+}

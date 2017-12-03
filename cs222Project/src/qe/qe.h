@@ -231,23 +231,52 @@ class Block{
 
 public:
 	Iterator *iterator;
-	int blockSize;
 	Attribute keyAttribute;
 	unordered_map<int, void*> intData;
 	unordered_map<float, void*> floatData;
 	unordered_map<string, void*> stringData;
+	int count;
 
-	Block(Iterator *iterator, int sizeInBytes, string &keyattributeName);
+	Block(Iterator *iterator, string &keyattributeName);
 	~Block();
 
 	RC getByKey(void* key, void* data);
 	void setByKey(void* key, void* data);
 	RC getNextBlock();
+	virtual bool shouldStopInserting() = 0;
+
 	void clear(){
 		this->intData.clear();
 		this->floatData.clear();
 		this->stringData.clear();
 	}
+};
+
+class FixedSizeBlock: public Block{
+public:
+	int blockSize;
+	vector<Attribute> recordDescriptor;
+
+	FixedSizeBlock(Iterator* iter, int blockSize, string &keyAttributeName):Block(iter, keyAttributeName){
+		this->blockSize = blockSize;
+		this->iterator->getAttributes(recordDescriptor);
+		this->getNextBlock();
+	}
+
+	~FixedSizeBlock(){
+//		#TODO FIX Memory leak
+	}
+
+	 bool shouldStopInserting(){
+		 int maxSizePerRecord = InternalRecord::getMaxBytes(recordDescriptor);
+		 int maxSizePerKey = this->keyAttribute.length+sizeof(int);
+		 int numberOfRecordsThatCanFit = floor(this->blockSize/(maxSizePerRecord+maxSizePerKey));
+		 if(this->count < numberOfRecordsThatCanFit) {
+			 return false;
+		 } else {
+			 return true;
+		 }
+	 }
 };
 
 class BNLJoin : public Iterator {
@@ -257,7 +286,7 @@ class BNLJoin : public Iterator {
 	TableScan* rightIterator;
 	Condition condition;
 	int blockSize;
-	Block* currentBlock;
+	FixedSizeBlock* currentBlock;
 	void* rightRecord;
 	void* leftRecord;
 
@@ -299,20 +328,66 @@ class INLJoin : public Iterator {
         void getAttributes(vector<Attribute> &attrs) const;
 };
 
+class PartitionBlock: public Block {
+public:
+	PartitionBlock(Iterator* iter, string &keyAttributeName):Block(iter, keyAttributeName){
+		this->getNextBlock();
+	}
+
+	 bool shouldStopInserting(){
+		return false;
+	 }
+
+};
+
+class PartitionIterator : public Iterator {
+private:
+	TableScan* getTableScanIteratorByIndex(int index);
+	int currentPartitionIndex;
+
+public:
+	string relationName;
+	unsigned int numPartitions;
+	vector<Attribute> attrs;
+	bool isFullTableScanMode;
+	TableScan* ts;
+
+	PartitionIterator(string relationName, unsigned int numPartitions, vector<Attribute> &attrs);
+	~PartitionIterator();
+    RC getNextTuple(void *data);
+    RC next();
+    void reset();
+    void getAttributes(vector<Attribute> &attrs) const;
+};
+
 // Optional for everyone. 10 extra-credit points
 class GHJoin : public Iterator {
     // Grace hash join operator
     public:
+	Iterator* leftIn;
+	Iterator* rightIn;
+	Condition condition;
+	unsigned numPartitions;
+	time_t joinTimeStamp;
+	PartitionIterator* partitionLeftIn;
+	PartitionIterator* partitionRightIn;
+	PartitionBlock* currentBlock;
+	void* rightRecord;
+	void* leftRecord;
+
       GHJoin(Iterator *leftIn,               // Iterator of input R
             Iterator *rightIn,               // Iterator of input S
             const Condition &condition,      // Join condition (CompOp is always EQ)
             const unsigned numPartitions     // # of partitions for each relation (decided by the optimizer)
-      ){};
-      ~GHJoin(){};
+      );
+      ~GHJoin();
 
-      RC getNextTuple(void *data){return QE_EOF;};
+      RC getNextTuple(void *data);
       // For attribute in vector<Attribute>, name it as rel.attr
-      void getAttributes(vector<Attribute> &attrs) const{};
+      void getAttributes(vector<Attribute> &attrs) const;
+
+      void createPartitions(string relationName, Iterator* iter, string &attributeName, unsigned int numPartitions);
+      int getPartitionIndexByKey(void* key, Attribute& attr);
 };
 
 class Aggregate : public Iterator {
