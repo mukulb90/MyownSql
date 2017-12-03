@@ -6,9 +6,9 @@ Filter::Filter(Iterator *input, const Condition & condition ){
 	this->condition = condition;
 }
 
-//Filter::~Filter(){
-//	this->iterator = 0;
-//}
+Filter::~Filter(){
+	this->iterator = 0;
+}
 
 
 RC Filter::getNextTuple(void* data) {
@@ -22,6 +22,7 @@ RC Filter::getNextTuple(void* data) {
 }
 
 void Filter::getAttributes(vector<Attribute> &attrs) const {
+	attrs.clear();
 	this->iterator->getAttributes(attrs);
 }
 
@@ -39,7 +40,7 @@ RC Filter::compareCondition(void *data){
 			memset(leftAttribute, 0, PAGE_SIZE);
 			ir->getAttributeByIndex(index, attr, leftAttribute, isNULL);
 
-			if (this->condition.bRhsIsAttr) {
+            if (this->condition.bRhsIsAttr) {
 				for (int index = 0; index < attr.size(); index++) {
 
 					if (attr.at(index).name == this->condition.rhsAttr) {
@@ -48,8 +49,10 @@ RC Filter::compareCondition(void *data){
 						void *rightAttribute = malloc(PAGE_SIZE);
 						memset(rightAttribute, 0, PAGE_SIZE);
 						ir->getAttributeByIndex(index, attr, rightAttribute,isNULL);
+						if(!isNULL){
 						comparisonResult = compareAttributes(rightAttribute,leftAttribute, attr.at(index),this->condition.op);
 						return comparisonResult;
+						}
 					}
 				}
 
@@ -80,57 +83,64 @@ Project::Project(Iterator *input,const vector<string> &attrNames){
 }
 
 RC Project::getNextTuple(void* data){
-	bool isNull;
-	char* cursor = (char*) data;
-	vector <Attribute> attr;
-	this->iterator->getAttributes(attr);
+	int rc;
 	void *nextTuple = calloc(1,PAGE_SIZE);
-	while(this->iterator->getNextTuple(nextTuple)!=EOF){
-		for(int i = 0; i<projectedAttr.size(); i++){
-			for(int index=0; index< attr.size(); index++){
-				if(attr.at(index).name == projectedAttr.at(i).name){
-					InternalRecord *ir = InternalRecord::parse(attr,nextTuple,0,false);
-					void *projectedData = calloc(1,PAGE_SIZE);
-					ir->getAttributeByIndex(index, attr, projectedData,isNull);
-						if(projectedAttr.at(i).type == TypeVarChar){
-							int length = 0;
-							memcpy(&length, projectedData, sizeof(int));
-							memcpy(cursor, projectedData, length+sizeof(int));
-							cursor = cursor + length+sizeof(int);
-							freeIfNotNull(projectedData);
-						}
-						else{
-							memcpy(cursor,projectedData, sizeof(int));
-							cursor = cursor+sizeof(int);
-							freeIfNotNull(projectedData);
-						}
-					}
-				}
-			}
 
-		return 0;
-		}
-	return -1;
+	rc = this->iterator->getNextTuple(nextTuple);
+	if(rc == -1) {
+		free(nextTuple);
+		return -1;
 	}
 
+	bool isNull;
+	vector <Attribute> attrs;
+	this->iterator->getAttributes(attrs);
+	vector <void*> dataArray;
+	vector <bool> isNullArray;
+	vector<Attribute> newRecordDescriptor;
+	this->getAttributes(newRecordDescriptor);
+
+	InternalRecord* ir = InternalRecord::parse(attrs, nextTuple, 0, false);
+
+	for(int i=0; i<newRecordDescriptor.size(); i++){
+		void *projectedData = calloc(1,PAGE_SIZE);
+		bool isNull;
+		Attribute attr = newRecordDescriptor[i];
+		ir->getAttributeValueByName(attr.name,attrs,projectedData,isNull);
+		dataArray.push_back(projectedData);
+		isNullArray.push_back(isNull);
+	}
+	mergeAttributesData(projectedAttr, isNullArray, dataArray,data);
+	return 0;
+}
+
+
 void Project::getAttributes(vector<Attribute> &attrs)const{
-	attrs = projectedAttr;
+
+	attrs.clear();
+	attrs= this->projectedAttr;
 }
 
 
 Aggregate::Aggregate(Iterator *input,  Attribute aggAttr, AggregateOp op){
-	this->reset = input;
 	this->iterator = input;
 	this->aggAttr = aggAttr;
 	this->oper = op;
 	this->reachedEndOfFile = false;
+	vector <Attribute> attr;
+	this->iterator->getAttributes(attr);
+		for(int i = 0; i< attr.size();i++){
+			if(attr.at(i).name == aggAttr.name){
+				this->index = i;
+			}
+		}
 };
 
 RC Aggregate::getNextTuple(void *data){
 
 	void *nextTuple = calloc(1,PAGE_SIZE);
 	vector <Attribute> attribute;
-	this->getAttributes(attribute);
+	this->iterator->getAttributes(attribute);
 	bool areAllAtrributesNull = true;
 	bool nullbit = false;
 	float counter = 0;
@@ -143,11 +153,11 @@ RC Aggregate::getNextTuple(void *data){
 	 switch (this->oper) {
 	 	 case MIN:
 	 	 case MAX :
-	 	 { // #TODO - initialization as values can be negative
+	 	 {
 	 		bool isNull;
 	 		void *maxData = calloc(1,PAGE_SIZE);
-
 	 		bool firstCount = false;
+
 	 			while(this->iterator->getNextTuple(nextTuple)!=EOF){
 	 				for(int index= 0; index<attribute.size();index++){
 	 					if(attribute.at(index).name == this->aggAttr.name ){
@@ -247,7 +257,7 @@ RC Aggregate::getNextTuple(void *data){
 RC Aggregate::sumAndCountAggregrate(void *sumData, void *counter, bool &areAllAttributesNullData){
 	void *nextTuple = calloc(1,PAGE_SIZE);
 	vector <Attribute> attribute;
-	this->getAttributes(attribute);
+	this->iterator->getAttributes(attribute);
 	float sum = 0;
 	float count = 0;
 	bool isNull;
@@ -281,7 +291,46 @@ RC Aggregate::sumAndCountAggregrate(void *sumData, void *counter, bool &areAllAt
 }
 
 void Aggregate::getAttributes(vector<Attribute> &attrs) const{
-	this->iterator->getAttributes(attrs);
+
+		attrs.clear();
+	    vector <Attribute> attributes;
+	    Attribute aggregrateAttribute;
+	    this->iterator->getAttributes(attributes);
+	    this->constructAggregrateAttribute(aggregrateAttribute,attributes[this->index]);
+	    attrs.push_back(aggregrateAttribute);
+}
+
+void Aggregate::constructAggregrateAttribute(Attribute &aggregrateAttribute, Attribute attribute) const{
+	string value = EnumStrings[this->oper];
+	value.append(attribute.name);
+	value.append(")");
+	aggregrateAttribute.name = value;
+
+	if(this->oper == MIN || this->oper == MAX ){
+		if(attribute.type == TypeInt){
+				aggregrateAttribute.type = TypeInt;
+			}
+		if(attribute.type == TypeReal){
+			aggregrateAttribute.type = TypeReal;
+
+		}
+		else{
+			aggregrateAttribute.type = TypeVarChar;
+		}
+		aggregrateAttribute.length = attribute.length;
+	}
+		if(this->oper == COUNT  ){
+			aggregrateAttribute.type = TypeReal;
+			aggregrateAttribute.length = sizeof(int);
+		}
+		if(this->oper == AVG){
+			aggregrateAttribute.type = TypeReal;
+			aggregrateAttribute.length = sizeof(float);
+		}
+		if(this->oper == SUM){
+			aggregrateAttribute.type = TypeReal;
+			aggregrateAttribute.length = sizeof(float);
+		}
 
 }
 

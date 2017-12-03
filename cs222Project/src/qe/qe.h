@@ -20,6 +20,7 @@ typedef enum{ MIN=0, MAX, COUNT, SUM, AVG } AggregateOp;
 //    For INT and REAL: use 4 bytes
 //    For VARCHAR: use 4 bytes for the length followed by the characters
 
+static const char * EnumStrings[] = { "MIN(", "MAX(", "COUNT(", "SUM(", "AVG(" };
 
 
 struct Value {
@@ -202,7 +203,7 @@ public:
 	Filter(Iterator *input,               // Iterator of input R
 			const Condition &condition     // Selection condition
 			);
-	~Filter(){};
+	~Filter();
 
 	RC getNextTuple(void *data);
 	// For attribute in vector<Attribute>, name it as rel.attr
@@ -321,7 +322,7 @@ class Aggregate : public Iterator {
 	Attribute aggAttr;
 	AggregateOp oper;
 	bool reachedEndOfFile;
-	Iterator *reset;
+	int index ;
     public:
         // Mandatory
         // Basic aggregation
@@ -345,6 +346,8 @@ class Aggregate : public Iterator {
         // output attrname = "MAX(rel.attr)"
         void getAttributes(vector<Attribute> &attrs) const;
         RC sumAndCountAggregrate(void *sumData,void *countData, bool &areAllAttributesNull);
+        void  constructAggregrateAttribute(Attribute &attrs, Attribute attribute) const;
 };
 
+RC compareAttributes(void * compAttrValue, void * data, Attribute conditionAttribute, CompOp compOp);
 #endif
