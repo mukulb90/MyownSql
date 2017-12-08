@@ -483,14 +483,16 @@ void mergeAttributesData(vector<Attribute> newRecordDescriptorForProjections,
 			} else {
 				byte.set(bitIndex, 0);
 			}
-			if(attr.type == TypeInt || attr.type == TypeReal) {
-				memcpy(cursor, attrData, sizeof(int));
-				cursor += sizeof(int);
-			} else {
-				int length = *((int*)attrData);
-				int attrSize = sizeof(int) + sizeof(char)*length;
-				memcpy(cursor, attrData, attrSize);
-				cursor += attrSize;
+			if(!isNull){
+				if(attr.type == TypeInt || attr.type == TypeReal) {
+					memcpy(cursor, attrData, sizeof(int));
+					cursor += sizeof(int);
+				} else {
+					int length = *((int*)attrData);
+					int attrSize = sizeof(int) + sizeof(char)*length;
+					memcpy(cursor, attrData, attrSize);
+					cursor += attrSize;
+				}
 			}
 
 			if(bitIndex == 0 || i == newRecordDescriptorForProjections.size() -1) {

@@ -393,6 +393,16 @@ INLJoin::INLJoin(Iterator *leftIn,           // Iterator of input R
 	this->rightRecord = malloc(PAGE_SIZE);
 	this->conditionAttribute = this->rightIn->iter->attr;
 	this->leftIn->getNextTuple(this->leftRecord);
+
+	vector<Attribute> leftRecordDescriptor;;
+	this->leftIn->getAttributes(leftRecordDescriptor);
+	InternalRecord* lir = InternalRecord::parse(leftRecordDescriptor,
+						this->leftRecord, 0, false);
+	bool isLeftKeyNull;
+	void* leftKey = malloc(this->conditionAttribute.length + 4);
+	lir->getAttributeValueByName(this->condition.lhsAttr,
+						leftRecordDescriptor, leftKey, isLeftKeyNull);
+	this->rightIn->setIterator(leftKey, leftKey, true, true);
 };
 
 INLJoin::~INLJoin() {
@@ -475,7 +485,16 @@ RC INLJoin::getNextTuple(void *data) {
 	//		left table exhausted
 			return -1;
 		}
-		this->rightIn->setIterator(NULL, NULL, true, true);
+
+		vector<Attribute> leftRecordDescriptor;;
+		this->leftIn->getAttributes(leftRecordDescriptor);
+		InternalRecord* lir = InternalRecord::parse(leftRecordDescriptor,
+							this->leftRecord, 0, false);
+		bool isLeftKeyNull;
+		void* leftKey = malloc(this->conditionAttribute.length + 4);
+		lir->getAttributeValueByName(this->condition.lhsAttr,
+							leftRecordDescriptor, leftKey, isLeftKeyNull);
+		this->rightIn->setIterator(leftKey, leftKey, true, true);
 	}
 };
 
@@ -720,6 +739,7 @@ GHJoin::GHJoin(Iterator* leftIn, Iterator* rightIn, const Condition& condition, 
 	this->partitionLeftIn = new PartitionIterator(this->condition.lhsAttr, numPartitions, leftAttributes);
 	this->partitionRightIn = new PartitionIterator(this->condition.rhsAttr, numPartitions, rightAttributes);
 	this->partitionLeftIn->isFullTableScanMode = false;
+	this->partitionRightIn->isFullTableScanMode = false;
 	this->currentBlock = new PartitionBlock(this->partitionLeftIn, this->condition.lhsAttr);
 }
 
@@ -804,7 +824,6 @@ RC GHJoin::getNextTuple(void* data) {
 			}
             if(this->partitionLeftIn->next() != -1){
 				this->currentBlock->getNextBlock();
-				this->partitionRightIn->reset();
 				this->partitionRightIn->next();
 			} else {
 				return -1;
@@ -870,6 +889,8 @@ void PartitionIterator::getAttributes(vector<Attribute> &attrs) const {
 
 void GHJoin::createPartitions(string relationName, Iterator* iter, string &attributeName, unsigned int numPartitions) {
 	RelationManager* rm = RelationManager::instance();
+	RecordBasedFileManager* rbfm = RecordBasedFileManager::instance();
+	FileHandle fh;
 	vector<Attribute> recordDescriptor;
 	iter->getAttributes(recordDescriptor);
 	Attribute attr;
@@ -893,9 +914,11 @@ void GHJoin::createPartitions(string relationName, Iterator* iter, string &attri
 		bool isNull;
 		ir->getAttributeValueByName(attributeName, recordDescriptor, key, isNull);
 		int index = this->getPartitionIndexByKey(key, attr);
-		rm->insertTuple(relationName + "_" + to_string(index), data, rid);
+		rbfm->openFile(relationName + "_" + to_string(index), fh);
+		rbfm->insertRecord(fh, recordDescriptor, data, rid);
 		count++;
 	}
+	rbfm->closeFile(fh);
 }
 
 
