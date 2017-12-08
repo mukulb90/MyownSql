@@ -51,8 +51,9 @@ RC Filter::compareCondition(void *data){
 						memset(rightAttribute, 0, PAGE_SIZE);
 						ir->getAttributeByIndex(index, attr, rightAttribute,isNULL);
 						if(!isNULL){
-						comparisonResult = compareAttributes(rightAttribute,leftAttribute, attr.at(index),this->condition.op);
-						return comparisonResult;
+							comparisonResult = compareAttributes(rightAttribute,leftAttribute, attr.at(index),this->condition.op);
+							freeIfNotNull(leftAttribute);
+							return comparisonResult;
 						}
 					}
 				}
@@ -66,6 +67,7 @@ RC Filter::compareCondition(void *data){
 
 		}
 	}
+	freeIfNotNull(leftAttribute);
 	return comparisonResult;
 }
 
@@ -389,13 +391,13 @@ INLJoin::INLJoin(Iterator *leftIn,           // Iterator of input R
 	this->leftIn = leftIn;
 	this->rightIn = rightIn;
 	this->condition = condition;
+	vector<Attribute> leftRecordDescriptor;;
+	this->leftIn->getAttributes(leftRecordDescriptor);
 	this->leftRecord = malloc(PAGE_SIZE);
 	this->rightRecord = malloc(PAGE_SIZE);
 	this->conditionAttribute = this->rightIn->iter->attr;
 	this->leftIn->getNextTuple(this->leftRecord);
 
-	vector<Attribute> leftRecordDescriptor;;
-	this->leftIn->getAttributes(leftRecordDescriptor);
 	InternalRecord* lir = InternalRecord::parse(leftRecordDescriptor,
 						this->leftRecord, 0, false);
 	bool isLeftKeyNull;
@@ -403,6 +405,7 @@ INLJoin::INLJoin(Iterator *leftIn,           // Iterator of input R
 	lir->getAttributeValueByName(this->condition.lhsAttr,
 						leftRecordDescriptor, leftKey, isLeftKeyNull);
 	this->rightIn->setIterator(leftKey, leftKey, true, true);
+	freeIfNotNull(leftKey);
 };
 
 INLJoin::~INLJoin() {
@@ -431,11 +434,15 @@ RC INLJoin::getNextTuple(void *data) {
 			rc = lir->getAttributeValueByName(this->condition.lhsAttr,
 					leftRecordDescriptor, leftKey, isLeftKeyNull);
 			if (rc == -1) {
+				freeIfNotNull(leftKey);
+				freeIfNotNull(rightKey);
 				return -1;
 			}
 			rc = rir->getAttributeValueByName(this->condition.rhsAttr,
 					rightRecordDescriptor, rightKey, isRightKeyNull);
 			if (rc == -1) {
+				freeIfNotNull(leftKey);
+				freeIfNotNull(rightKey);
 				return -1;
 			}
 
@@ -477,6 +484,12 @@ RC INLJoin::getNextTuple(void *data) {
 
 				mergeAttributesData(newRecordDescriptor, isNullArray, dataArray,
 						data);
+
+				for(int i = 0;i<dataArray.size(); i++){
+					freeIfNotNull(dataArray[i]);
+				}
+				freeIfNotNull(leftKey);
+				freeIfNotNull(rightKey);
 				return 0;
 			}
 		}
@@ -495,6 +508,7 @@ RC INLJoin::getNextTuple(void *data) {
 		lir->getAttributeValueByName(this->condition.lhsAttr,
 							leftRecordDescriptor, leftKey, isLeftKeyNull);
 		this->rightIn->setIterator(leftKey, leftKey, true, true);
+		freeIfNotNull(leftKey);
 	}
 };
 
@@ -530,7 +544,8 @@ BNLJoin::BNLJoin(Iterator *leftIn,            // Iterator of input R
 }
 
 BNLJoin::~BNLJoin(){
-
+	freeIfNotNull(this->leftRecord);
+	freeIfNotNull(this->rightRecord);
 }
 
 void BNLJoin::getAttributes(vector<Attribute> &attrs) const{
@@ -565,11 +580,13 @@ RC BNLJoin::getNextTuple(void *data) {
 
 			rc = rir->getAttributeValueByName(this->condition.rhsAttr, rightRecordDescriptor, rightKey, isRightKeyNull);
 			if (rc == -1) {
+				freeIfNotNull(rightKey);
 				return -1;
 			}
 
 			rc = this->currentBlock->getByKey(rightKey, this->leftRecord);
 			if(rc == -1) {
+				freeIfNotNull(rightKey);
 				//				not found
 				continue;
 			}
@@ -605,6 +622,11 @@ RC BNLJoin::getNextTuple(void *data) {
 
 			mergeAttributesData(newRecordDescriptor, isNullArray, dataArray,
 					data);
+			freeIfNotNull(rightKey);
+
+			for(int i=0; i<dataArray.size(); i++){
+				freeIfNotNull(dataArray[i]);
+			}
 			return 0;
 
 		}
@@ -632,7 +654,6 @@ Block::Block(Iterator *iterator, string &keyAttributeName) {
 }
 
 Block::~Block() {
-
 }
 
 void Block::setByKey(void* key, void* data) {
