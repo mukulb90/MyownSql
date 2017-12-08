@@ -246,6 +246,21 @@ public:
 	virtual bool shouldStopInserting() = 0;
 
 	void clear(){
+		for(auto const &ent1 : this->intData) {
+			void* value = ent1.second;
+			freeIfNotNull(value);
+		}
+
+		 for(auto const &ent2 : this->floatData) {
+			 void* value = ent2.second;
+			 freeIfNotNull(value);
+		}
+
+		 for(auto const &ent2 : this->stringData) {
+			 void* value = ent2.second;
+			 freeIfNotNull(value);
+		 }
+
 		this->intData.clear();
 		this->floatData.clear();
 		this->stringData.clear();
@@ -264,7 +279,7 @@ public:
 	}
 
 	~FixedSizeBlock(){
-//		#TODO FIX Memory leak
+		this->clear();
 	}
 
 	 bool shouldStopInserting(){
@@ -332,6 +347,10 @@ class PartitionBlock: public Block {
 public:
 	PartitionBlock(Iterator* iter, string &keyAttributeName):Block(iter, keyAttributeName){
 		this->getNextBlock();
+	}
+
+	~PartitionBlock(){
+		this->clear();
 	}
 
 	 bool shouldStopInserting(){

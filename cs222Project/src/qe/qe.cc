@@ -546,6 +546,7 @@ BNLJoin::BNLJoin(Iterator *leftIn,            // Iterator of input R
 BNLJoin::~BNLJoin(){
 	freeIfNotNull(this->leftRecord);
 	freeIfNotNull(this->rightRecord);
+	delete this->currentBlock;
 }
 
 void BNLJoin::getAttributes(vector<Attribute> &attrs) const{
@@ -738,6 +739,7 @@ RC Block::getNextBlock() {
 		this->setByKey(key, data);
 		data = malloc(maxSizePerRecord);
 		key = malloc(maxSizePerKey);
+		freeIfNotNull(key);
 		this->count++;
 	}
 	return 0;
@@ -787,6 +789,9 @@ int GHJoin::getPartitionIndexByKey(void* key, Attribute& attr){
 
 GHJoin::~GHJoin() {
 	RelationManager* rm = RelationManager::instance();
+	delete this->currentBlock;
+	freeIfNotNull(this->leftRecord);
+	freeIfNotNull(this->rightRecord);
 	for(int i=0; i<this->numPartitions; i++){
 		string tableName = this->partitionLeftIn->relationName + '_' + to_string(i);
 		rm->deleteTable(tableName);
@@ -805,6 +810,7 @@ RC GHJoin::getNextTuple(void* data) {
 				rir->getAttributeValueByName(this->condition.rhsAttr, rightRecordDescriptor, rightKey, isNull);
 				if(this->currentBlock->getByKey(rightKey, this->leftRecord)!= -1){
 					// it is is hit
+					freeIfNotNull(rightKey);
 					vector<Attribute> leftAttrs;
 					this->leftIn->getAttributes(leftAttrs);
 					InternalRecord * lir = InternalRecord::parse(leftAttrs, this->leftRecord, 0, false);
@@ -840,6 +846,9 @@ RC GHJoin::getNextTuple(void* data) {
 //					RelationManager::instance()->printTuple(leftAttrs, this->leftRecord);
 //					RelationManager::instance()->printTuple(rightRecordDescriptor, this->rightRecord);
 					mergeAttributesData(newRecordDescriptor, isNullArray, dataArray, data);
+					for (int i=0; i<dataArray.size(); i++){
+						freeIfNotNull(dataArray[i]);
+					}
 					return 0;
 				}
 			}
@@ -937,8 +946,11 @@ void GHJoin::createPartitions(string relationName, Iterator* iter, string &attri
 		int index = this->getPartitionIndexByKey(key, attr);
 		rbfm->openFile(relationName + "_" + to_string(index), fh);
 		rbfm->insertRecord(fh, recordDescriptor, data, rid);
+		delete ir;
 		count++;
 	}
+	freeIfNotNull(data);
+	freeIfNotNull(key);
 	rbfm->closeFile(fh);
 }
 
