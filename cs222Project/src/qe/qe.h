@@ -417,6 +417,11 @@ class Aggregate : public Iterator {
 	AggregateOp oper;
 	bool reachedEndOfFile;
 	int index ;
+	Attribute groupAttr;
+	bool ifGroupBy = false;
+	int groupIndex;
+	vector<void*> *aggregationResult;
+	int cursor = -1;
     public:
         // Mandatory
         // Basic aggregation
@@ -431,7 +436,7 @@ class Aggregate : public Iterator {
                   Attribute aggAttr,           // The attribute over which we are computing an aggregate
                   Attribute groupAttr,         // The attribute over which we are grouping the tuples
                   AggregateOp op              // Aggregate operation
-        ){};
+        );
         ~Aggregate(){};
 
         RC getNextTuple(void *data);
@@ -440,7 +445,14 @@ class Aggregate : public Iterator {
         // output attrname = "MAX(rel.attr)"
         void getAttributes(vector<Attribute> &attrs) const;
         RC sumAndCountAggregrate(void *sumData,void *countData, bool &areAllAttributesNull);
-        void  constructAggregrateAttribute(Attribute &attrs, Attribute attribute) const;
+        void  constructAggregrateAttribute(Attribute &attrs, Attribute &attribute) const;
+        unordered_map<int, void*> intData;
+        	unordered_map<float, void*> floatData;
+        	unordered_map<string, void*> stringData;
+
+        	int getByKey (void* key, void*data);
+        	void setByKey (void *key, void*data);
+        	vector <Attribute> groupAttribute;
 };
 
 RC compareAttributes(void * compAttrValue, void * data, Attribute conditionAttribute, CompOp compOp);

@@ -139,6 +139,41 @@ Aggregate::Aggregate(Iterator *input,  Attribute aggAttr, AggregateOp op){
 		}
 };
 
+Aggregate::Aggregate(Iterator *input, Attribute aggAttr,Attribute groupAttr, AggregateOp op){
+
+	this->iterator = input;
+	this->groupAttr = groupAttr;
+	this->oper = op;
+	this->aggAttr = aggAttr;
+	this->reachedEndOfFile = false;
+	this->ifGroupBy = true;
+	this->aggregationResult = NULL;
+
+
+	vector <Attribute> attr;
+		this->iterator->getAttributes(attr);
+			for(int i = 0; i< attr.size();i++){
+				if(attr.at(i).name == aggAttr.name){
+					this->index = i;
+					this->groupAttribute.push_back(attr.at(i));
+//					cout << "Attr :: " << attr.at(i).name << endl;
+				}
+			}
+	vector <Attribute> oldRecordDescriptor;
+	this->getAttributes(oldRecordDescriptor);
+	for(int i = 0; i < oldRecordDescriptor.size();i++){
+//		cout << "Old record descriptor" << oldRecordDescriptor.at(i).name << endl;
+//		cout << "Group attr name" << groupAttr.name << endl;
+		if(oldRecordDescriptor.at(i).name == groupAttr.name){
+			this->groupIndex = i;
+			this->groupAttribute.push_back(attr.at(i));
+//			cout << "Attr 2:: " << attr.at(i).name << endl;
+
+		}
+	}
+
+}
+
 RC Aggregate::getNextTuple(void *data){
 
 	void *nextTuple = calloc(1,PAGE_SIZE);
@@ -149,7 +184,6 @@ RC Aggregate::getNextTuple(void *data){
 	float counter = 0;
 	float sum = 0;
 	float finalResult ;
-
 	if(this->reachedEndOfFile){
 		 return -1;
 	}
@@ -160,7 +194,124 @@ RC Aggregate::getNextTuple(void *data){
 	 		bool isNull;
 	 		void *maxData = calloc(1,PAGE_SIZE);
 	 		bool firstCount = false;
+	 		if(this->ifGroupBy){
+	 			if(this->aggregationResult == NULL){
+	 			vector <Attribute> attrs;
+	 			this->getAttributes(attrs);
+	 			vector <bool> isNullArray ;
+	 			this->intData.clear();
+	 			vector <Attribute> groupByAggregrateAttribute;
+	 			while(this->iterator->getNextTuple(nextTuple)!=EOF){
+		 			InternalRecord* ir = InternalRecord::parse(attribute, nextTuple, 0, false);
+	 				for(int i=0; i<attrs.size(); i++){
+	 					void *aggregateData = calloc(1,PAGE_SIZE);
+	 					void *groupData = calloc (1,PAGE_SIZE);
+	 					bool isNull1;
+	 					bool isNull2;
 
+	 					ir->getAttributeValueByName(this->aggAttr.name,attribute,aggregateData,isNull1);
+                        isNullArray.push_back(isNull);
+	 					ir->getAttributeValueByName(this->groupAttr.name,attribute,groupData,isNull2);
+	 					isNullArray.push_back(isNull);
+//	 					cout << "attribute DATA :: " <<  *((int *)aggregateData) <<endl;
+//	 					cout << "groupData DATA :: " <<  *((int *)groupData) <<endl;
+	 					// if we get a key then compare the value
+	 					int k = 0;
+                        float f;
+                        if(this->aggAttr.type == TypeReal){
+                            f =  *(float*)aggregateData;
+                        } else {
+                         f = (float)*(int*)aggregateData;
+                        }
+	 					memcpy(aggregateData, &f, sizeof(float));
+	 					memcpy (&k,groupData,4);
+	 					if((this->intData.find(k) == this->intData.end())){
+	 						this->setByKey(groupData,aggregateData);
+
+	 					}
+	 					else{
+	 					this->getByKey(groupData, maxData);
+	 					float comparisonResult = compare(aggregateData,maxData, attribute.at(this->index),false, false);
+
+	 					if (comparisonResult > 0 && this->oper == MIN){
+	 						memcpy(maxData,aggregateData,sizeof(int));
+	 						this->setByKey(groupData,aggregateData);
+
+	 			}
+	 					if (comparisonResult <  0 && this->oper == MAX){
+	 						 memcpy(maxData,aggregateData,sizeof(int));
+	 						 this->setByKey(groupData,aggregateData);
+	 					}
+	 					}
+	 				}
+	 				// iterate over it and get key value pair
+
+	 			}
+
+	 			// memcpy for sometime
+
+	 			vector<Attribute> rd;
+
+	 			Attribute attr1;
+	 			attr1.length=4;
+	 			attr1.type = TypeInt;
+	 			attr1.name = this->groupAttr.name;
+//				cout <<"attr1.name:-" << attr1.name << endl;
+
+	 			Attribute attr2;
+	 			attr2.length=4;
+				attr2.type = TypeReal;
+				attr2.name = "MIN(" + this->aggAttr.name+ ")";
+//				cout <<"attr2.name:-" << attr2.name << endl;
+
+				rd.push_back(attr1);
+				rd.push_back(attr2);
+
+			this->aggregationResult = new vector<void*>();
+			for (auto it = this->intData.begin(); it != this->intData.end();++it) {
+//				std::cout << " " << it->first << ":" << *((float*) it->second) << endl;
+				void* record = malloc(InternalRecord::getMaxBytes(rd));
+				void * d = malloc(sizeof(int));
+				memcpy(d, &it->first, sizeof(int));
+				vector<void*> dataArray;
+				dataArray.push_back(d);
+				dataArray.push_back(it->second);
+
+				mergeAttributesData(rd, isNullArray, dataArray, record);
+				RecordBasedFileManager::instance()->printRecord(rd, record);
+				this->aggregationResult->push_back(record);
+
+			}
+			memcpy(data, this->aggregationResult->at(++this->cursor), InternalRecord::getMaxBytes(rd));
+			return 0;
+	 		} else {
+	 			if(++this->cursor < this->aggregationResult->size()){
+	 				// memcpy for sometime
+
+					vector<Attribute> rd;
+					Attribute attr1;
+					attr1.length=4;
+					attr1.type = TypeInt;
+					attr1.name = this->groupAttr.name;
+//					cout <<"attr1.name:-" << attr1.name << endl;
+
+					Attribute attr2;
+					attr2.length=4;
+					attr2.type = TypeReal;
+					attr2.name = "MIN(" + this->aggAttr.name+ ")";
+
+//					cout << "cout << attr2.name << endl;"<< attr2.name << endl;
+
+					rd.push_back(attr1);
+					rd.push_back(attr2);
+	 				memcpy(data, this->aggregationResult->at(this->cursor), InternalRecord::getMaxBytes(rd));
+	 				return 0;
+	 			} else {
+	 				return -1;
+	 			}
+	 		}
+		 		break;
+	 		}
 	 			while(this->iterator->getNextTuple(nextTuple)!=EOF){
 	 				for(int index= 0; index<attribute.size();index++){
 	 					if(attribute.at(index).name == this->aggAttr.name ){
@@ -206,6 +357,113 @@ RC Aggregate::getNextTuple(void *data){
 	 	 case COUNT :
 	 	 {
 
+		 	if(this->ifGroupBy){
+
+		 			bool isNull;
+		 			void *maxData = calloc(1,PAGE_SIZE);
+		 			bool firstCount = false;
+		 			if(this->aggregationResult == NULL){
+		 				vector <Attribute> attrs;
+		 			 	this->getAttributes(attrs);
+		 			 	vector <bool> isNullArray ;
+		 			 	this->intData.clear();
+		 			 	vector <Attribute> groupByAggregrateAttribute;
+		 			 	while(this->iterator->getNextTuple(nextTuple)!=EOF){
+		 				 	InternalRecord* ir = InternalRecord::parse(attribute, nextTuple, 0, false);
+		 			 		for(int i=0; i<attrs.size(); i++){
+		 			 			void *aggregateData = calloc(1,PAGE_SIZE);
+		 			 			void *groupData = calloc (1,PAGE_SIZE);
+		 			 			bool isNull1;
+		 			 			bool isNull2;
+
+		 			 			ir->getAttributeValueByName(this->aggAttr.name,attribute,aggregateData,isNull1);
+								isNullArray.push_back(isNull);
+								ir->getAttributeValueByName(this->groupAttr.name,attribute,groupData,isNull2);
+								isNullArray.push_back(isNull);
+		//	 					cout << "attribute DATA :: " <<  *((int *)aggregateData) <<endl;
+		//	 					cout << "groupData DATA :: " <<  *((int *)groupData) <<endl;
+								// if we get a key then compare the value
+								int k = 0;
+								float f = (float)*(int*)aggregateData;
+								memcpy(aggregateData, &f, sizeof(float));
+								memcpy (&k,groupData,4);
+								if((this->intData.find(k) == this->intData.end())){
+									float *sum = (float*)malloc(sizeof(float));
+									float init_value = 1;
+									memcpy(sum, &init_value, sizeof(float));
+									this->intData[k] = sum;
+								}
+								else{
+								    float additonResult = *(float*)this->intData[k] +  1;
+	                                void* data = malloc(sizeof(float));
+	                                memcpy(data, &additonResult, sizeof(float));
+	                                this->intData[k] = data;
+		 			 		}
+		 			 	}
+		 			 				// iterate over it and get key value pair
+
+		 			 			}
+
+		 			 			// memcpy for sometime
+
+		 			 			vector<Attribute> rd;
+		 			 			Attribute attr1;
+								attr1.length=4;
+								attr1.type = TypeInt;
+								attr1.name = this->groupAttr.name;
+
+								Attribute attr2;
+								attr2.length=4;
+								attr2.type = TypeReal;
+								attr2.name = "Count(" + this->aggAttr.name+ ")";
+
+		 						rd.push_back(attr1);
+		 						rd.push_back(attr2);
+
+		 					this->aggregationResult = new vector<void*>();
+		 					for (auto it = this->intData.begin(); it != this->intData.end();++it) {
+//		 						std::cout << " " << it->first << ":" << *((float*) it->second) << endl;
+		 						void* record = malloc(InternalRecord::getMaxBytes(rd));
+		 						void * d = malloc(sizeof(int));
+		 						memcpy(d, &it->first, sizeof(int));
+		 						vector<void*> dataArray;
+		 						dataArray.push_back(d);
+		 						dataArray.push_back(it->second);
+
+		 						mergeAttributesData(rd, isNullArray, dataArray, record);
+		 						RecordBasedFileManager::instance()->printRecord(rd, record);
+		 						this->aggregationResult->push_back(record);
+
+		 					}
+		 					memcpy(data, this->aggregationResult->at(++this->cursor), InternalRecord::getMaxBytes(rd));
+		 					return 0;
+		 			 		} else {
+		 			 			if(++this->cursor < this->aggregationResult->size()){
+		 			 				// memcpy for sometime
+
+		 							vector<Attribute> rd;
+		 							Attribute attr1;
+									attr1.length=4;
+									attr1.type = TypeInt;
+									attr1.name = this->groupAttr.name;
+
+									Attribute attr2;
+									attr2.length=4;
+									attr2.type = TypeReal;
+									attr2.name = "COUNT(" + this->aggAttr.name+ ")";
+
+		 							rd.push_back(attr1);
+		 							rd.push_back(attr2);
+		 			 				memcpy(data, this->aggregationResult->at(this->cursor), InternalRecord::getMaxBytes(rd));
+		 			 				return 0;
+		 			 			} else {
+		 			 				return -1;
+		 			 			}
+		 			 		}
+
+		 	}
+
+
 	 		int RC = this->sumAndCountAggregrate(&sum,&counter,areAllAtrributesNull);
 	 		char * cursorAggregate = (char*) data;
 	 		if (areAllAtrributesNull) {
@@ -238,6 +496,110 @@ RC Aggregate::getNextTuple(void *data){
 
 	 	 case SUM :
 	 	{
+	 		if(this->ifGroupBy){
+
+	 			bool isNull;
+	 			void *maxData = calloc(1,PAGE_SIZE);
+	 			bool firstCount = false;
+	 			if(this->aggregationResult == NULL){
+	 				vector <Attribute> attrs;
+	 			 	this->getAttributes(attrs);
+	 			 	vector <bool> isNullArray ;
+	 			 	this->intData.clear();
+	 			 	vector <Attribute> groupByAggregrateAttribute;
+	 			 	while(this->iterator->getNextTuple(nextTuple)!=EOF){
+	 				 	InternalRecord* ir = InternalRecord::parse(attribute, nextTuple, 0, false);
+	 			 		for(int i=0; i<attrs.size(); i++){
+	 			 			void *aggregateData = calloc(1,PAGE_SIZE);
+	 			 			void *groupData = calloc (1,PAGE_SIZE);
+	 			 			bool isNull1;
+	 			 			bool isNull2;
+
+	 			 			ir->getAttributeValueByName(this->aggAttr.name,attribute,aggregateData,isNull1);
+							isNullArray.push_back(isNull);
+							ir->getAttributeValueByName(this->groupAttr.name,attribute,groupData,isNull2);
+							isNullArray.push_back(isNull);
+	//	 					cout << "attribute DATA :: " <<  *((int *)aggregateData) <<endl;
+	//	 					cout << "groupData DATA :: " <<  *((int *)groupData) <<endl;
+							// if we get a key then compare the value
+							int k = 0;
+							float f = (float)*(int*)aggregateData;
+							memcpy(aggregateData, &f, sizeof(float));
+							memcpy (&k,groupData,4);
+							if((this->intData.find(k) == this->intData.end())){
+								this->intData[k] = aggregateData;
+							}
+							else{
+							    float additonResult = *(float*)this->intData[k] +  *(float*) aggregateData;
+                                void* data = malloc(sizeof(float));
+                                memcpy(data, &additonResult, sizeof(float));
+                                this->intData[k] = data;
+	 			 		}
+	 			 	}
+	 			 				// iterate over it and get key value pair
+
+	 			 			}
+
+	 			 			// memcpy for sometime
+
+	 			 			vector<Attribute> rd;
+	 			 			Attribute attr1;
+							attr1.length=4;
+							attr1.type = TypeInt;
+							attr1.name = this->groupAttr.name;
+
+							Attribute attr2;
+							attr2.length=4;
+							attr2.type = TypeReal;
+							attr2.name = "MIN(" + this->aggAttr.name+ ")";
+
+	 						rd.push_back(attr1);
+	 						rd.push_back(attr2);
+
+	 					this->aggregationResult = new vector<void*>();
+	 					for (auto it = this->intData.begin(); it != this->intData.end();++it) {
+//	 						std::cout << " " << it->first << ":" << *((float*) it->second) << endl;
+	 						void* record = malloc(InternalRecord::getMaxBytes(rd));
+	 						void * d = malloc(sizeof(int));
+	 						memcpy(d, &it->first, sizeof(int));
+	 						vector<void*> dataArray;
+	 						dataArray.push_back(d);
+	 						dataArray.push_back(it->second);
+
+	 						mergeAttributesData(rd, isNullArray, dataArray, record);
+	 						RecordBasedFileManager::instance()->printRecord(rd, record);
+	 						this->aggregationResult->push_back(record);
+
+	 					}
+	 					memcpy(data, this->aggregationResult->at(++this->cursor), InternalRecord::getMaxBytes(rd));
+	 					return 0;
+	 			 		} else {
+	 			 			if(++this->cursor < this->aggregationResult->size()){
+	 			 				// memcpy for sometime
+
+	 							vector<Attribute> rd;
+	 							Attribute attr1;
+								attr1.length=4;
+								attr1.type = TypeInt;
+								attr1.name = this->groupAttr.name;
+
+								Attribute attr2;
+								attr2.length=4;
+								attr2.type = TypeReal;
+								attr2.name = "MIN(" + this->aggAttr.name+ ")";
+
+	 							rd.push_back(attr1);
+	 							rd.push_back(attr2);
+	 			 				memcpy(data, this->aggregationResult->at(this->cursor), InternalRecord::getMaxBytes(rd));
+	 			 				return 0;
+	 			 			} else {
+	 			 				return -1;
+	 			 			}
+	 			 		}
+
+	 		}
+
+
 	 		this->sumAndCountAggregrate(&sum, &counter, areAllAtrributesNull);
 	 		char * cursorAggregate = (char*) data;
 	 		if (areAllAtrributesNull) {
@@ -256,6 +618,61 @@ RC Aggregate::getNextTuple(void *data){
 
 }
 
+void Aggregate::setByKey(void* key, void* data) {
+	if (this->groupAttr.type == TypeInt) {
+		int keyValue = *(int*) key;
+		this->intData[keyValue] = data;
+	} else if (this->groupAttr.type == TypeReal) {
+		float keyValue = *(float*) key;
+		this->floatData[keyValue] = data;
+	} else {
+		VarcharParser* vp = new VarcharParser(key);
+		string keyValue;
+		vp->unParse(keyValue);
+		vp->data = NULL;
+		delete vp;
+		this->stringData[keyValue] = data;
+	}
+}
+
+RC Aggregate::getByKey(void* key, void* data) {
+	vector<Attribute> recordDescriptor;
+	this->iterator->getAttributes(recordDescriptor);
+	int maxSizePerRecord = InternalRecord::getMaxBytes(recordDescriptor);
+
+	if(this->groupAttr.type == TypeInt) {
+		int keyValue = *(int*)key;
+		if(this->intData.find(keyValue) != this->intData.end()){
+			memcpy(data, this->intData[keyValue], maxSizePerRecord);
+			return 0;
+		} else {
+			return -1;
+		}
+	} else if(this->groupAttr.type == TypeReal) {
+		float keyValue = *(float*)key;
+		if(this->floatData.find(keyValue) != this->floatData.end()){
+			memcpy(data, this->floatData[keyValue], maxSizePerRecord);
+			return 0;
+		} else {
+			return -1;
+		}
+
+	} else {
+		VarcharParser* vp = new VarcharParser(key);
+		string keyValue;
+		vp->unParse(keyValue);
+		vp->data = NULL;
+		delete vp;
+
+		if(this->stringData.find(keyValue) != this->stringData.end()){
+			memcpy(data, this->stringData[keyValue], maxSizePerRecord);
+			return 0;
+		} else {
+			return -1;
+		}
+	}
+	return -1;
+}
 
 RC Aggregate::sumAndCountAggregrate(void *sumData, void *counter, bool &areAllAttributesNullData){
 	void *nextTuple = calloc(1,PAGE_SIZE);
@@ -293,6 +710,8 @@ RC Aggregate::sumAndCountAggregrate(void *sumData, void *counter, bool &areAllAt
 	return 0;
 }
 
+
+
 void Aggregate::getAttributes(vector<Attribute> &attrs) const{
 
 		attrs.clear();
@@ -301,9 +720,12 @@ void Aggregate::getAttributes(vector<Attribute> &attrs) const{
 	    this->iterator->getAttributes(attributes);
 	    this->constructAggregrateAttribute(aggregrateAttribute,attributes[this->index]);
 	    attrs.push_back(aggregrateAttribute);
+//	    if(this->ifGroupBy){
+//
+//	    }
 }
 
-void Aggregate::constructAggregrateAttribute(Attribute &aggregrateAttribute, Attribute attribute) const{
+void Aggregate::constructAggregrateAttribute(Attribute &aggregrateAttribute, Attribute &attribute) const{
 	string value = EnumStrings[this->oper];
 	value.append(attribute.name);
 	value.append(")");

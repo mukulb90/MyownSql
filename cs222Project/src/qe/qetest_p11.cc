@@ -78,7 +78,7 @@ RC privateTestCase_11()
             cout << "***** The group-based aggregation is not working properly. *****" << endl;
         	rc = fail;
         	goto clean_up;
-        } 
+        }
         actualResultCnt++;
     }
 

@@ -19,6 +19,7 @@ RC testCase_16()
     cerr << "***** In QE Test Case 16 *****" << endl;
 
     RC rc = success;
+    rm->printTable("group");
 
     // Create TableScan
     TableScan *input = new TableScan(*rm, "group");

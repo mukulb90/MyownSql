@@ -69,5 +69,7 @@ int main()
     // Test Catalog Information
     RC rcmain = TEST_RM_14(catalog_table_name);
 
+
+
     return rcmain;
 }
