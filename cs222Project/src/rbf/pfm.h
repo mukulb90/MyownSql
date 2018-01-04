@@ -59,7 +59,8 @@ typedef enum { TypeInt = 0, TypeReal, TypeVarChar } AttrType;
 typedef unsigned AttrLength;
 
 struct Attribute {
-    string   name;     // attribute name
+    int isIndex;
+	string   name;     // attribute name
     AttrType type;     // attribute type
     AttrLength length; // attribute length
 };
@@ -103,10 +104,12 @@ public :
 	InternalRecord();
 	~InternalRecord();
 	static int getInternalRecordBytes(const vector<Attribute> &recordDescriptor, const void* data);
+	static int getMaxBytes(const vector<Attribute> &recordDescriptor);
 	static InternalRecord* parse(const vector<Attribute> &recordDescriptor,const void* data, const int &versionId, const int &isPointedByForwarder);
 	RC unParse(const vector<Attribute> &recordDescriptor, void* data, int &versionId, int &isPointedByForwarder);
 	RC getBytes();
 	RC getAttributeByIndex(const int &index, const vector<Attribute> &recordDescriptor, void* attribute, bool &isNull);
+	RC getAttributeValueByName(const string attributeName, const vector<Attribute>& recordDescriptor, void* attribute, bool &isNull);
 	RC getVersionId(int &versionId);
 	bool isPointedByForwarder();
 };
@@ -201,7 +204,8 @@ public:
 	int numberOfPages;
 	FileHandle* handle;
     Cache<Page*> * pagesCache;
-
+    int hitCounter;
+    int missCounter;
 
 	PagedFile(string fileName, FileHandle *fileHandle);
 	~PagedFile();

@@ -327,6 +327,9 @@ RC RBFM_ScanIterator::getNextRecord(RID &returnedRid, void *data) {
 				delete page;
 			} else {
 				Page* page = fileHandle.file->getPageByIndex(this->pageNumber);
+				if(page == 0){
+					return -1;
+				}
 				int numberOfSlots = page->getNumberOfSlots();
 				if(this->slotNumber+1 < numberOfSlots) {
 					this->slotNumber++;
@@ -480,14 +483,16 @@ void mergeAttributesData(vector<Attribute> newRecordDescriptorForProjections,
 			} else {
 				byte.set(bitIndex, 0);
 			}
-			if(attr.type == TypeInt || attr.type == TypeReal) {
-				memcpy(cursor, attrData, sizeof(int));
-				cursor += sizeof(int);
-			} else {
-				int length = *((int*)attrData);
-				int attrSize = sizeof(int) + sizeof(char)*length;
-				memcpy(cursor, attrData, attrSize);
-				cursor += attrSize;
+			if(!isNull){
+				if(attr.type == TypeInt || attr.type == TypeReal) {
+					memcpy(cursor, attrData, sizeof(int));
+					cursor += sizeof(int);
+				} else {
+					int length = *((int*)attrData);
+					int attrSize = sizeof(int) + sizeof(char)*length;
+					memcpy(cursor, attrData, attrSize);
+					cursor += attrSize;
+				}
 			}
 
 			if(bitIndex == 0 || i == newRecordDescriptorForProjections.size() -1) {

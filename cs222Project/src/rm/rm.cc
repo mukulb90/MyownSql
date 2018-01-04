@@ -76,6 +76,14 @@ void getColumnsCatalogRecordDescriptor(vector<Attribute> &recordDescriptor) {
 	attr6.name = "version";
 	attr6.length = 4;
 	recordDescriptor.push_back(attr6);
+
+
+	Attribute attr7;
+	attr7.type = TypeInt;
+	attr7.name = "isIndexCreated";
+	attr7.length = 4;
+	recordDescriptor.push_back(attr7);
+
 }
 
 void RelationManager::printTable(string tableName) {
@@ -232,7 +240,9 @@ ColumnsCatalogRecord::~ColumnsCatalogRecord() {
 }
 
 
-ColumnsCatalogRecord* ColumnsCatalogRecord::parse(const int &tableId, const Attribute &attrs, const int &position, const int &version) {
+ColumnsCatalogRecord* ColumnsCatalogRecord::parse(const int &tableId,
+		const Attribute &attrs, const int &position, const int &version,
+		const int &isIndexCreated) {
 	vector<Attribute> columnsAttrs;
 	getColumnsCatalogRecordDescriptor(columnsAttrs);
 	vector<string> records;
@@ -242,12 +252,14 @@ ColumnsCatalogRecord* ColumnsCatalogRecord::parse(const int &tableId, const Attr
 	records.push_back(to_string(attrs.length));
 	records.push_back(to_string(position));
 	records.push_back(to_string(version));
+	records.push_back(to_string(isIndexCreated));
 	void* columnsCatalogRecordData = createTableData(columnsAttrs, records);
 	ColumnsCatalogRecord* columnsCatalogRecord = new ColumnsCatalogRecord(columnsCatalogRecordData);
 	return columnsCatalogRecord;
 }
 
-RC ColumnsCatalogRecord::unParse(int &tableId, Attribute &attrs, int &columnIndex, int &version) {
+RC ColumnsCatalogRecord::unParse(int &tableId, Attribute &attrs,
+		int &columnIndex, int &version, int &isIndexCreated) {
 	vector<Attribute> columnsAttrs;
 	getColumnsCatalogRecordDescriptor(columnsAttrs);
 	vector<string> records;
@@ -258,6 +270,8 @@ RC ColumnsCatalogRecord::unParse(int &tableId, Attribute &attrs, int &columnInde
 	attrs.length = stoi(columnRecord[3]);
 	columnIndex = stoi(columnRecord[4]);
 	version = stoi(columnRecord[5]);
+	isIndexCreated = stoi(columnRecord[6]);
+	attrs.isIndex = isIndexCreated;
 	return 0;
 }
 
@@ -323,16 +337,16 @@ RC RelationManager::createCatalog()
 
 	ColumnsCatalogRecord* columnsCatalogRecord;
 	for (int i = 0; i < tablesRecordDescriptor.size(); ++i) {
-		columnsCatalogRecord = ColumnsCatalogRecord::parse(1, tablesRecordDescriptor[i], i, 0);
+		columnsCatalogRecord = ColumnsCatalogRecord::parse(1, tablesRecordDescriptor[i], i, 0, 0);
 		rbfm->insertRecord(fileHandle, columnsRecordDescriptor, columnsCatalogRecord->data, rid);
-		rbfm->printRecord(columnsRecordDescriptor, columnsCatalogRecord->data);
+//		rbfm->printRecord(columnsRecordDescriptor, columnsCatalogRecord->data);
 		delete columnsCatalogRecord;
 	}
 
 	for (int i = 0; i < columnsRecordDescriptor.size(); ++i) {
-		columnsCatalogRecord = ColumnsCatalogRecord::parse(2, columnsRecordDescriptor[i], i, 0);
+		columnsCatalogRecord = ColumnsCatalogRecord::parse(2, columnsRecordDescriptor[i], i, 0, 0);
 		rbfm->insertRecord(fileHandle, columnsRecordDescriptor, columnsCatalogRecord->data, rid);
-		rbfm->printRecord(columnsRecordDescriptor, columnsCatalogRecord->data);
+//		rbfm->printRecord(columnsRecordDescriptor, columnsCatalogRecord->data);
 		delete columnsCatalogRecord;
 	}
 
@@ -371,7 +385,7 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
 	ColumnsCatalogRecord* columnsCatalogRecord;
 	rbfm->openFile(COLUMNS_CATALOG_NAME, fileHandle);
 	for (int i = 0; i < attrs.size(); ++i) {
-		columnsCatalogRecord = ColumnsCatalogRecord::parse(tableId, attrs[i], i, 0);
+		columnsCatalogRecord = ColumnsCatalogRecord::parse(tableId, attrs[i], i, 0, 0);
 		rbfm->insertRecord(fileHandle, columnsAttrs, columnsCatalogRecord->data, rid);
 		delete columnsCatalogRecord;
 
@@ -528,7 +542,8 @@ RC RelationManager::getAttributes(const string &tableName, vector<Attribute> &at
 		Attribute readAttribute;
 		int columnIndex;
 		int readVersion;
-		ccr->unParse(readTableId, readAttribute, columnIndex, readVersion);
+		int isIndexCreated;
+		ccr->unParse(readTableId, readAttribute, columnIndex, readVersion, isIndexCreated);
 		if(versionId == readVersion) {
 			columnIndexToAttributeMap[columnIndex] = readAttribute;
 		}
@@ -583,7 +598,8 @@ RC RelationManager::getAttributesVector(const string &tableName, vector<vector<A
 			Attribute readAttribute;
 			int columnIndex;
 			int readVersionId;
-			ccr->unParse(readTableId, readAttribute, columnIndex, readVersionId);
+			int isIndexCreated;
+			ccr->unParse(readTableId, readAttribute, columnIndex, readVersionId, isIndexCreated);
 			ccr->data = 0;
 			delete ccr;
 			if(versionToRecordDescriptorMap.find(readVersionId) == versionToRecordDescriptorMap.end()) {
@@ -637,6 +653,26 @@ RC RelationManager::internalInsertTuple(const string &tableName, const void *dat
 	if(rc == -1) {
 		return rc;
 	}
+	vector<Attribute> indexAttrs;
+	Attribute indexAttr;
+	InternalRecord* record = InternalRecord::parse(recordDescriptors[currentVersion], data, currentVersion, false);
+	this->getAttributes(tableName, indexAttrs);
+	for(int i=0; i<indexAttrs.size(); i++) {
+		indexAttr = indexAttrs[i];
+		if(indexAttr.isIndex == 0 )
+			continue;
+		void* key = malloc(indexAttr.length+sizeof(int));
+		IndexManager* im = IndexManager::instance();
+		bool isNull;
+		record->getAttributeByIndex(i, recordDescriptors[currentVersion], key, isNull);
+		IXFileHandle ixhandle;
+		rc = im->openFile(IndexManager::getIndexFileName(tableName, indexAttr.name), ixhandle);
+		im->insertEntry(ixhandle, indexAttr, key, rid);
+//        im->printBtree(ixhandle, indexAttr);
+        im->closeFile(ixhandle);
+        freeIfNotNull(key);
+	}
+	delete record;
 	return rbfm->closeFile(fileHandle);
 }
 
@@ -761,7 +797,10 @@ RC RelationManager::scan(const string &tableName,
    vector<vector<Attribute>> recordDescriptors;
    RBFM_ScanIterator* rbfm_ScanIterator = new RBFM_ScanIterator();
    RBFM_ScanIterator rbfm_ScanIteratorInstance = *rbfm_ScanIterator;
-   rbfm->openFile(tableName, *fileHandle);
+   rc = rbfm->openFile(tableName, *fileHandle);
+   if(rc == -1) {
+	   return rc;
+   }
    int tableId, versionId;
    	rc = this->getTableDetailsByName(tableName, tableId, versionId);
    	if(rc == -1) {
@@ -814,7 +853,7 @@ RC RelationManager::dropAttribute(const string &tableName, const string &attribu
 
 	for(int i=0; i< newRecordDescriptor.size(); i++) {
 		tempAttr = newRecordDescriptor[i];
-		columnsCatalogRecord = ColumnsCatalogRecord::parse(tableId, tempAttr, i, versionId+1);
+		columnsCatalogRecord = ColumnsCatalogRecord::parse(tableId, tempAttr, i, versionId+1, 0);
 		this->internalInsertTuple(COLUMNS_CATALOG_NAME, columnsCatalogRecord->data, rid);
 		delete columnsCatalogRecord;
 	}
@@ -861,7 +900,7 @@ RC RelationManager::addAttribute(const string &tableName, const Attribute &attr)
 
 	for(int i=0; i< currentRecordDescriptor.size(); i++) {
 		tempAttr = currentRecordDescriptor[i];
-		columnsCatalogRecord = ColumnsCatalogRecord::parse(tableId, tempAttr, i, versionId+1);
+		columnsCatalogRecord = ColumnsCatalogRecord::parse(tableId, tempAttr, i, versionId+1, 0);
 		this->internalInsertTuple(COLUMNS_CATALOG_NAME, columnsCatalogRecord->data, rid);
 		delete columnsCatalogRecord;
 	}
@@ -885,4 +924,121 @@ RC RelationManager::addAttribute(const string &tableName, const Attribute &attr)
 	return rc;
 }
 
+RC RelationManager::createIndex(const string &tableName, const string &attributeName){
+	int rc = 0;
+	int tableId, versionId;
+	this->getTableDetailsByName(tableName, tableId, versionId);
+	vector<Attribute> recordDescriptors;
+    getColumnsCatalogRecordDescriptor(recordDescriptors);
+	RM_ScanIterator iter;
+	vector<string> attrNames;
+	for(int i=0; i<recordDescriptors.size(); i++) {
+		attrNames.push_back(recordDescriptors[i].name);
+	}
+	string tableIdLabel = "table-id";
+	this->scan(COLUMNS_CATALOG_NAME, tableIdLabel, EQ_OP, &tableId, attrNames, iter);
+	RID rid;
+	void* data = malloc(PAGE_SIZE);
+	ColumnsCatalogRecord * record;
+	while(iter.getNextTuple(rid, data) != -1){
+		record = new ColumnsCatalogRecord(data);
+		Attribute attr;
+		int tableId;
+		int columnIndex;
+		int version;
+		int isIndexCreated = 0;
+		record->unParse(tableId, attr, columnIndex, version, isIndexCreated);
+		record->data = NULL;
+		delete record;
+		if(attr.name != attributeName) {
+			continue;
+		}
+		if(isIndexCreated == 1) {
+//			Index already created
+			freeIfNotNull(data);
+			return -1;
+		}
+		else {
+//			update entry in columns table for this
+			ColumnsCatalogRecord* updatedRecord = ColumnsCatalogRecord::parse(tableId, attr, columnIndex, version, 1);
+			rc = this->internalUpdateTuple(COLUMNS_CATALOG_NAME, updatedRecord->data, rid);
+			delete updatedRecord;
+			if(rc == -1) {
+				freeIfNotNull(data);
+				return rc;
+			}
+			string indexName = IndexManager::getIndexFileName(tableName, attributeName);
+			IndexManager* im = IndexManager::instance();
+			rc = im->createFile(indexName);
+			if(rc == -1) {
+				return -1;
+			}
 
+			IXFileHandle ixFileHandle;
+			im->openFile(indexName, ixFileHandle);
+			vector<string> indexKey = {attributeName};
+			vector<Attribute> indexAttr = {attr};
+			iter.close();
+
+			RM_ScanIterator iter2;
+			this->scan(tableName, attributeName, NO_OP, NULL, indexKey, iter2);
+
+			while(iter2.getNextTuple(rid, data) != -1) {
+				im->insertEntry(ixFileHandle, attr, (char*)data+1, rid);
+			}
+            iter2.close();
+            im->closeFile(ixFileHandle);
+			freeIfNotNull(data);
+			this->invalidateCache(tableName);
+			return rc;
+
+		}
+	}
+	freeIfNotNull(data);
+	return -1;
+}
+
+RC RelationManager::getAllIndexOnTable(const string tableName, vector<Attribute> &attrs) {
+	vector<Attribute> allAttrs;
+	Attribute attr;
+	this->getAttributes(tableName, allAttrs);
+	for(int i=0; i < allAttrs.size(); i++) {
+		attr = allAttrs[i];
+		if(attr.isIndex) {
+			attrs.push_back(attr);
+		}
+	}
+	return 0;
+}
+
+RC RelationManager::indexScan(const string &tableName,
+			const string &attributeName,
+			const void *lowKey,
+			const void *highKey,
+			bool lowKeyInclusive,
+			bool highKeyInclusive,
+			RM_IndexScanIterator &rm_IndexScanIterator) {
+
+	IndexManager* ix = IndexManager::instance();
+	IXFileHandle * ixFileHandle = new IXFileHandle();
+	IX_ScanIterator *iterator = new IX_ScanIterator();
+	rm_IndexScanIterator.indexHandle = ixFileHandle;
+	rm_IndexScanIterator.ixIterator = iterator;
+	vector<Attribute> attrs;
+	this->getAllIndexOnTable(tableName, attrs);
+	ix->openFile(IndexManager::getIndexFileName(tableName, attributeName), *ixFileHandle);
+	for(int i=0; i<attrs.size(); i++) {
+        rm_IndexScanIterator.attr = attrs[i];
+		if(rm_IndexScanIterator.attr.name == attributeName) {
+			break;
+		}
+		if(i == attrs.size()-1) {
+//			Index not found
+			return -1;
+		}
+	}
+//    ix->printBtree(*ixFileHandle, indexAttr);
+
+    return ix->scan(*ixFileHandle, rm_IndexScanIterator.attr, lowKey, highKey, lowKeyInclusive, highKeyInclusive, *iterator);
+
+}
