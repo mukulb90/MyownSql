@@ -1,7 +1,8 @@
 # MyownSql
 Principles of data management Project (My own sql implementation)
 
-Go to folder "qe" and type in:
+Go to folder "qe" and type in - 
+
 make clean
 make
 
